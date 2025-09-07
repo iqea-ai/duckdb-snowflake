@@ -10,7 +10,7 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/main/secret/secret.hpp"
 #include "duckdb/common/types/value.hpp"
-#include <arrow-adbc/adbc.h>
+#include "duckdb/common/adbc/adbc.h"
 #include <iostream>
 #include <string>
 #include <vector>

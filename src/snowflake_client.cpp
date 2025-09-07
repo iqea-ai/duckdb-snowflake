@@ -556,7 +556,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	DPRINT("Executing SQL query...\n");
 	status = AdbcStatementExecuteQuery(&statement, &stream, &rows_affected, &error);
 	CheckError(status, "Failed to execute AdbcStatement with SQL query: " + query, &error);
-	DPRINT("SQL query executed successfully, rows_affected: %ld\n", rows_affected);
+	DPRINT("SQL query executed successfully, rows_affected: %lld\n", rows_affected);
 
 	DPRINT("Getting Arrow schema...\n");
 	ArrowSchema schema = {};
@@ -621,12 +621,12 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 
 		for (int64_t i = 0; i < arrow_array.n_children; i++) {
 			if (arrow_array.children[i]) {
-				DPRINT("Child %ld: length=%ld, null_count=%ld\n", i, arrow_array.children[i]->length,
+				DPRINT("Child %lld: length=%lld, null_count=%lld\n", i, arrow_array.children[i]->length,
 				       arrow_array.children[i]->null_count);
 			}
 		}
 
-		DPRINT("Got Arrow batch %d with %ld rows\n", batch_count, arrow_array.length);
+		DPRINT("Got Arrow batch %d with %lld rows\n", batch_count, arrow_array.length);
 		batch_count++;
 
 		auto temp_chunk = make_uniq<DataChunk>();
@@ -635,7 +635,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 		auto array_wrapper = make_uniq<ArrowArrayWrapper>();
 		array_wrapper->arrow_array = arrow_array;
 
-		DPRINT("Arrow array details: n_buffers=%ld, n_children=%ld\n", arrow_array.n_buffers, arrow_array.n_children);
+		DPRINT("Arrow array details: n_buffers=%lld, n_children=%lld\n", arrow_array.n_buffers, arrow_array.n_children);
 
 		DPRINT("Creating ArrowScanLocalState...\n");
 		ArrowScanLocalState local_state(std::move(array_wrapper), context);
@@ -648,7 +648,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 
 		try {
 			ArrowTableFunction::ArrowToDuckDB(local_state, arrow_table.GetColumns(), *temp_chunk, batch_count - 1);
-			DPRINT("ArrowToDuckDB completed, chunk size: %zu\n", temp_chunk->size());
+			DPRINT("ArrowToDuckDB completed, chunk size: %llu\n", temp_chunk->size());
 		} catch (const std::exception &e) {
 			DPRINT("ArrowToDuckDB failed: %s\n", e.what());
 			throw;
@@ -670,7 +670,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	for (const auto &chunk : collected_chunks) {
 		result_chunk->Append(*chunk);
 	}
-	DPRINT("Final result chunk has %zu rows\n", result_chunk->size());
+	DPRINT("Final result chunk has %llu rows\n", result_chunk->size());
 
 	if (stream.release) {
 		stream.release(&stream);
