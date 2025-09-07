@@ -7,7 +7,8 @@ testext
 test/python/__pycache__/
 .Rhistory
 vcpkg_installed
-.envadbc_drivers/
+.env
+adbc_drivers/
 compile_commands.json
 adbc_drivers/adbc_driver_snowflake-1.7.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
 adbc_drivers/libadbc_driver_snowflake.so
