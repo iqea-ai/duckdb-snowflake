@@ -1,0 +1,24 @@
+CompileFlags:
+  CompilationDatabase: build/clangd
+  Add:
+    - -std=c++17
+    - -DDUCKDB_EXTENSION_API
+    - -I${workspaceFolder}/src/include
+    - -I${workspaceFolder}/duckdb/src/include
+    - -I${workspaceFolder}/duckdb/third_party
+    - -I${workspaceFolder}/vcpkg_installed/x64-linux/include
+    - -I/usr/include
+    - -I/usr/local/include
+  Remove: []
+
+Index:
+  Background: Build
+
+Diagnostics:
+  UnusedIncludes: Strict
+
+InlayHints:
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+  Designators: Yes
