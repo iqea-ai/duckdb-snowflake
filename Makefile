@@ -43,7 +43,8 @@ ci-debug-build: download-adbc
 	mkdir -p build/debug
 	cmake -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='${PROJ_DIR}extension_config.cmake' \
 		-DCMAKE_BUILD_TYPE=Debug -G Ninja -S "./duckdb/" -B build/debug
-	cmake --build build/debug --config Debug -j8
+	# Use fewer parallel jobs to avoid memory issues on GitHub runners
+	cmake --build build/debug --config Debug -j4
 
 # Snowflake-specific test target
 .PHONY: test-snowflake
