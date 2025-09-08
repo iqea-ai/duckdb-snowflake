@@ -397,22 +397,6 @@ vector<SnowflakeColumn> SnowflakeClient::GetTableInfo(ClientContext &context, co
 	return col_data;
 }
 
-idx_t SnowflakeClient::GetTableRowCount(ClientContext &context, const string &schema, const string &table) {
-	string row_count_query = "SELECT row_count FROM " + config.database +
-	                         ".INFORMATION_SCHEMA.TABLES WHERE table_schema = '" + schema + "' AND table_name = '" +
-	                         table + "'";
-	auto chunk = ExecuteAndGetChunk(context, row_count_query, {LogicalType::INTEGER}, {"row_count"});
-
-	if (!chunk || chunk->size() == 0) {
-		if (!chunk || chunk->size() == 0) {
-			throw CatalogException("Table '%s.%s' not found in database '%s' while attempting to retrieve row count",
-			                       schema, table, config.database);
-		}
-	}
-
-	return chunk->GetValue(0, 0).GetValue<int64_t>();
-}
-
 vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &context, const string &query,
                                                              const vector<string> &expected_col_names) {
 	if (!connected) {

@@ -12,7 +12,6 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 #include "duckdb/function/table_function.hpp"
-#include "snowflake_functions.hpp"
 #include "snowflake_secret_provider.hpp"
 
 namespace duckdb {
@@ -35,18 +34,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
 	loader.RegisterFunction(snowflake_version_function);
-
-	// Register the snowflake_store_credentials scalar function
-	auto store_credentials_func = GetSnowflakeStoreCredentialsFunction();
-	loader.RegisterFunction(store_credentials_func);
-
-	// Register the snowflake_list_profiles function
-	auto list_profiles_func = GetSnowflakeListProfilesFunction();
-	loader.RegisterFunction(list_profiles_func);
-
-	// Register the snowflake_validate_credentials function
-	auto validate_credentials_func = GetSnowflakeValidateCredentialsFunction();
-	loader.RegisterFunction(validate_credentials_func);
 
 #ifdef ADBC_AVAILABLE
 	// Register snowflake_scan table function (only available when ADBC is available)

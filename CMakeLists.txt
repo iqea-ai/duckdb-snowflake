@@ -33,7 +33,6 @@ set(EXTENSION_SOURCES
     src/snowflake_client.cpp
     src/snowflake_client_manager.cpp
     src/snowflake_config.cpp
-    src/snowflake_functions.cpp
     src/snowflake_types.cpp
     src/snowflake_transaction.cpp
     src/storage/snowflake_storage.cpp

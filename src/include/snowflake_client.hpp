@@ -36,7 +36,6 @@ public:
 	vector<string> ListSchemas(ClientContext &context);
 	vector<string> ListTables(ClientContext &context, const string &schema);
 	vector<SnowflakeColumn> GetTableInfo(ClientContext &context, const string &schema, const string &table_name);
-	idx_t GetTableRowCount(ClientContext &context, const string &schema, const string &table);
 
 private:
 	SnowflakeConfig config;

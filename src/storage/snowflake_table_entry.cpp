@@ -66,7 +66,9 @@ unique_ptr<BaseStatistics> SnowflakeTableEntry::GetStatistics(ClientContext &con
 
 TableStorageInfo SnowflakeTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
-	result.cardinality = client->GetTableRowCount(context, schema.name, name);
+	// Don't fetch row count to avoid ADBC statement conflicts
+	// Snowflake is read-only, so exact cardinality isn't critical
+	result.cardinality = 0;
 	result.index_info = vector<IndexInfo>();
 	return result;
 }

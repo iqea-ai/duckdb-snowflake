@@ -19,8 +19,8 @@ struct SnowflakeScanBindData : public ArrowScanFunctionData {
 	}
 };
 
-static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableFunctionBindInput &input,
-                                                  vector<LogicalType> &return_types, vector<string> &names);
+// static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableFunctionBindInput &input,
+//                                                   vector<LogicalType> &return_types, vector<string> &names);
 
 } // namespace snowflake
 
