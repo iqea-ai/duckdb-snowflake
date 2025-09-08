@@ -1,0 +1,273 @@
+# name: test/sql/snowflake_read_operations.test
+# description: Comprehensive read operations tests for Snowflake ATTACH functionality
+# group: [sql]
+
+require snowflake
+
+# Require environment variables to be set
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: ATTACH with READ_ONLY flag
+statement ok
+ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
+
+# Test 2: Basic SELECT with LIMIT
+query III
+SELECT c_custkey, c_name, c_address FROM sf_db.tpch_sf1.customer LIMIT 3;
+----
+1	Customer#000000001	IVhzIApeRb ot,c,E
+2	Customer#000000002	XSTf4,NCwDVaWNe6tEgvwfmRchLXak
+3	Customer#000000003	MG9kdTD2WBHm
+
+# Test 3: Basic aggregations
+query III
+SELECT COUNT(c_custkey) as total_customers, 
+       COUNT(DISTINCT c_nationkey) as unique_nations,
+       AVG(c_acctbal) as avg_balance
+FROM sf_db.tpch_sf1.customer;
+----
+150000	25	4495.5123316
+
+# Test 4: JOIN operations
+query ITII
+SELECT c.c_custkey, c.c_name, o.o_orderkey, o.o_totalprice
+FROM sf_db.tpch_sf1.customer c
+JOIN sf_db.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+ORDER BY c.c_custkey, o.o_orderkey
+LIMIT 3;
+----
+1	Customer#000000001	454791	74602.81
+1	Customer#000000001	579908	54048.26
+1	Customer#000000001	3868359	123076.84
+
+# Test 5: Complex aggregations with GROUP BY
+query IIII
+SELECT c_nationkey,
+       COUNT(c_custkey) as customer_count,
+       AVG(c_acctbal) as avg_balance,
+       SUM(c_acctbal) as total_balance
+FROM sf_db.tpch_sf1.customer
+GROUP BY c_nationkey
+ORDER BY c_nationkey
+LIMIT 3;
+----
+0	5925	4442.695375527426	26322970.10
+1	5975	4485.000113807531	26797875.68
+2	5999	4471.0244674112355	26821675.78
+
+# Test 6: Window functions
+query IIIIII
+SELECT c_custkey, c_name, c_acctbal,
+       ROW_NUMBER() OVER (PARTITION BY c_nationkey ORDER BY c_acctbal DESC) as row_num,
+       RANK() OVER (PARTITION BY c_nationkey ORDER BY c_acctbal DESC) as rank_num,
+       DENSE_RANK() OVER (PARTITION BY c_nationkey ORDER BY c_acctbal DESC) as dense_rank_num
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey <= 2
+ORDER BY c_nationkey, row_num
+LIMIT 6;
+----
+34047	Customer#000034047	9998.97	1	1	1
+57166	Customer#000057166	9998.69	2	2	2
+82302	Customer#000082302	9997.56	3	3	3
+55168	Customer#000055168	9994.95	4	4	4
+68317	Customer#000068317	9993.94	5	5	5
+9753	Customer#000009753	9991.30	6	6	6
+
+# Test 7: Subqueries
+query III
+SELECT c_custkey, c_name, c_acctbal
+FROM sf_db.tpch_sf1.customer
+WHERE c_acctbal > (SELECT AVG(c_acctbal) FROM sf_db.tpch_sf1.customer)
+ORDER BY c_custkey
+LIMIT 3;
+----
+3	Customer#000000003	7498.12
+6	Customer#000000006	7638.57
+7	Customer#000000007	9561.95
+
+# Test 8: EXISTS subqueries
+query I
+SELECT COUNT(c_custkey) as customers_with_orders
+FROM sf_db.tpch_sf1.customer c
+WHERE EXISTS (SELECT 1 FROM sf_db.tpch_sf1.orders o WHERE o.o_custkey = c.c_custkey);
+----
+99996
+
+# Test 9: NOT EXISTS subqueries
+query I
+SELECT COUNT(c_custkey) as customers_without_orders
+FROM sf_db.tpch_sf1.customer c
+WHERE NOT EXISTS (SELECT 1 FROM sf_db.tpch_sf1.orders o WHERE o.o_custkey = c.c_custkey);
+----
+50004
+
+# Test 10: IN subqueries
+query I
+SELECT COUNT(c_custkey) as customers_in_first_nations
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey IN (0, 1, 2);
+----
+17899
+
+# Test 11: NOT IN subqueries
+query I
+SELECT COUNT(c_custkey) as customers_not_in_first_nations
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey NOT IN (0, 1, 2);
+----
+132101
+
+# Test 12: UNION operations
+query II
+SELECT c_custkey, c_name FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 3
+UNION
+SELECT c_custkey, c_name FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 49997
+ORDER BY c_custkey
+LIMIT 6;
+----
+1	Customer#000000001
+2	Customer#000000002
+3	Customer#000000003
+49997	Customer#000049997
+49998	Customer#000049998
+49999	Customer#000049999
+
+# Test 13: INTERSECT operations
+query I
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 5
+INTERSECT
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 3
+ORDER BY c_custkey;
+----
+3
+4
+5
+
+# Test 14: EXCEPT operations
+query I
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 5
+EXCEPT
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 3
+ORDER BY c_custkey;
+----
+1
+2
+
+# Test 15: CASE expressions
+query II
+SELECT c_custkey,
+       CASE 
+           WHEN c_acctbal < 0 THEN 'Negative'
+           WHEN c_acctbal = 0 THEN 'Zero'
+           WHEN c_acctbal < 1000 THEN 'Low'
+           WHEN c_acctbal < 5000 THEN 'Medium'
+           ELSE 'High'
+       END as balance_category
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 5;
+----
+1	Low
+2	Low
+3	High
+4	Medium
+5	Low
+
+# Test 16: String operations
+query IIIII
+SELECT c_name,
+       UPPER(c_name) as upper_name,
+       LOWER(c_name) as lower_name,
+       LENGTH(c_name) as name_length,
+       SUBSTRING(c_name, 1, 8) as name_prefix
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 3;
+----
+Customer#000000001	CUSTOMER#000000001	customer#000000001	18	Customer
+Customer#000000002	CUSTOMER#000000002	customer#000000002	18	Customer
+Customer#000000003	CUSTOMER#000000003	customer#000000003	18	Customer
+
+# Test 17: Numeric operations
+query IIIII
+SELECT c_acctbal,
+       ABS(c_acctbal) as abs_balance,
+       ROUND(c_acctbal, 2) as rounded_balance,
+       CEIL(c_acctbal) as ceiling_balance,
+       FLOOR(c_acctbal) as floor_balance
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 3;
+----
+711.56	711.56	711.56	712	711
+121.65	121.65	121.65	122	121
+7498.12	7498.12	7498.12	7499	7498
+
+# Test 18: Multiple JOINs
+query IIIII
+SELECT c.c_custkey, c.c_name, o.o_orderkey, l.l_linenumber, l.l_quantity
+FROM sf_db.tpch_sf1.customer c
+JOIN sf_db.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+JOIN sf_db.tpch_sf1.lineitem l ON o.o_orderkey = l.l_orderkey
+ORDER BY c.c_custkey, o.o_orderkey, l.l_linenumber
+LIMIT 6;
+----
+1	Customer#000000001	454791	1	40.00
+1	Customer#000000001	454791	2	13.00
+1	Customer#000000001	579908	1	33.00
+1	Customer#000000001	3868359	1	36.00
+1	Customer#000000001	3868359	2	9.00
+1	Customer#000000001	3868359	3	32.00
+
+# Test 19: Conditional aggregations
+query IIII
+SELECT c_nationkey,
+       COUNT(c_custkey) as total_customers,
+       COUNT(CASE WHEN c_acctbal > 5000 THEN 1 END) as high_balance_customers,
+       COUNT(CASE WHEN c_acctbal < 1000 THEN 1 END) as low_balance_customers
+FROM sf_db.tpch_sf1.customer
+GROUP BY c_nationkey
+ORDER BY c_nationkey
+LIMIT 3;
+----
+0	5925	2628	1069
+1	5975	2675	1066
+2	5999	2665	1098
+
+# Test 20: Common Table Expression (CTE)
+query III
+WITH customer_stats AS (
+    SELECT 
+        c_nationkey,
+        COUNT(*) as customer_count,
+        AVG(c_acctbal) as avg_balance
+    FROM sf_db.tpch_sf1.customer 
+    GROUP BY c_nationkey
+)
+SELECT 
+    c_nationkey,
+    customer_count,
+    avg_balance
+FROM customer_stats
+ORDER BY customer_count DESC, c_nationkey
+LIMIT 3;
+----
+9	6161	4533.433290050317
+6	6100	4436.013193442623
+19	6100	4544.851129508197
+
+# Test 21: Final verification
+query I
+SELECT COUNT(c_custkey) as final_verification FROM sf_db.tpch_sf1.customer;
+----
+150000
+
+# Test 22: Cleanup
+statement ok
+DETACH sf_db;

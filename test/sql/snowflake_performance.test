@@ -1,0 +1,347 @@
+# name: test/sql/snowflake_performance.test
+# description: Performance and stress tests for Snowflake ATTACH functionality
+# group: [sql]
+
+require snowflake
+
+# Require environment variables to be set
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: ATTACH with READ_ONLY flag
+statement ok
+ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
+
+# Test 2: Large result set handling
+query I
+SELECT COUNT(c_custkey) as total_customers FROM sf_db.tpch_sf1.customer;
+----
+150000
+
+# Test 3: Complex aggregations with multiple functions
+query IIIIIII
+SELECT c_nationkey,
+       COUNT(c_custkey) as customer_count,
+       AVG(c_acctbal) as avg_balance,
+       SUM(c_acctbal) as total_balance,
+       MIN(c_acctbal) as min_balance,
+       MAX(c_acctbal) as max_balance,
+       STDDEV(c_acctbal) as stddev_balance
+FROM sf_db.tpch_sf1.customer
+GROUP BY c_nationkey
+ORDER BY c_nationkey
+LIMIT 5;
+----
+0	5925	4442.695375527426	26322970.10	-997.46	9998.97	3176.1897900570875
+1	5975	4485.000113807531	26797875.68	-993.95	9994.84	3158.8012799868593
+2	5999	4471.0244674112355	26821675.78	-999.26	9999.49	3161.457560515417
+3	6020	4489.259827242525	27025344.16	-999.65	9998.32	3179.7774875683244
+4	5995	4520.492752293578	27100354.05	-999.95	9996.32	3191.6164497275204
+
+# Test 4: Window functions with large datasets
+query IIIIIIIIIII
+SELECT c_custkey, c_name, c_acctbal,
+       ROW_NUMBER() OVER (ORDER BY c_acctbal, c_custkey) as row_num,
+       RANK() OVER (ORDER BY c_acctbal, c_custkey) as rank_num,
+       DENSE_RANK() OVER (ORDER BY c_acctbal, c_custkey) as dense_rank_num,
+       NTILE(10) OVER (ORDER BY c_acctbal, c_custkey) as ntile_10,
+       LAG(c_acctbal, 1) OVER (ORDER BY c_acctbal, c_custkey) as lag_balance,
+       LEAD(c_acctbal, 1) OVER (ORDER BY c_acctbal, c_custkey) as lead_balance,
+       FIRST_VALUE(c_acctbal) OVER (ORDER BY c_acctbal, c_custkey) as first_balance,
+       LAST_VALUE(c_acctbal) OVER (ORDER BY c_acctbal, c_custkey) as last_balance
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 5;
+----
+1	Customer#000000001	711.56	23223	23223	23223	2	711.53	711.56	-999.99	711.56
+2	Customer#000000002	121.65	15352	15352	15352	2	121.45	121.75	-999.99	121.65
+3	Customer#000000003	7498.12	115900	115900	115900	8	7498.03	7498.27	-999.99	7498.12
+4	Customer#000000004	2866.83	52903	52903	52903	4	2866.72	2866.89	-999.99	2866.83
+5	Customer#000000005	794.47	24342	24342	24342	2	794.46	794.52	-999.99	794.47
+
+# Test 5: Multiple JOINs with large datasets
+query IIIII
+SELECT c.c_custkey, c.c_name, o.o_orderkey, l.l_linenumber, l.l_quantity
+FROM sf_db.tpch_sf1.customer c
+JOIN sf_db.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+JOIN sf_db.tpch_sf1.lineitem l ON o.o_orderkey = l.l_orderkey
+ORDER BY c.c_custkey, o.o_orderkey, l.l_linenumber
+LIMIT 10;
+----
+1	Customer#000000001	454791	1	40.00
+1	Customer#000000001	454791	2	13.00
+1	Customer#000000001	579908	1	33.00
+1	Customer#000000001	3868359	1	36.00
+1	Customer#000000001	3868359	2	9.00
+1	Customer#000000001	3868359	3	32.00
+1	Customer#000000001	3868359	4	6.00
+1	Customer#000000001	4273923	1	28.00
+1	Customer#000000001	4273923	2	42.00
+1	Customer#000000001	4808192	1	26.00
+
+# Test 6: Complex subqueries with correlated conditions
+query I
+SELECT COUNT(c_custkey) as customers_with_high_balance
+FROM sf_db.tpch_sf1.customer c1
+WHERE c1.c_acctbal > (
+    SELECT AVG(c2.c_acctbal) 
+    FROM sf_db.tpch_sf1.customer c2 
+    WHERE c2.c_nationkey = c1.c_nationkey
+);
+----
+74759
+
+# Test 7: EXISTS subqueries with large datasets
+query I
+SELECT COUNT(c_custkey) as customers_with_orders
+FROM sf_db.tpch_sf1.customer c
+WHERE EXISTS (
+    SELECT 1 
+    FROM sf_db.tpch_sf1.orders o 
+    WHERE o.o_custkey = c.c_custkey
+);
+----
+99996
+
+# Test 8: NOT EXISTS subqueries with large datasets
+query I
+SELECT COUNT(c_custkey) as customers_without_orders
+FROM sf_db.tpch_sf1.customer c
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM sf_db.tpch_sf1.orders o 
+    WHERE o.o_custkey = c.c_custkey
+);
+----
+50004
+
+# Test 9: IN subqueries with large datasets
+query I
+SELECT COUNT(c_custkey) as customers_in_first_nations
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey IN (0, 1, 2, 3, 4);
+----
+29914
+
+# Test 10: NOT IN subqueries with large datasets
+query I
+SELECT COUNT(c_custkey) as customers_not_in_first_nations
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey NOT IN (0, 1, 2, 3, 4);
+----
+120086
+
+# Test 11: UNION operations with large datasets
+query TT
+SELECT c_custkey, c_name FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 5
+UNION
+SELECT c_custkey, c_name FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 49995
+ORDER BY c_custkey
+LIMIT 10;
+----
+1	Customer#000000001
+2	Customer#000000002
+3	Customer#000000003
+4	Customer#000000004
+5	Customer#000000005
+49995	Customer#000049995
+49996	Customer#000049996
+49997	Customer#000049997
+49998	Customer#000049998
+49999	Customer#000049999
+
+# Test 12: INTERSECT operations with large datasets
+query I
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 10
+INTERSECT
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 5
+ORDER BY c_custkey;
+----
+5
+6
+7
+8
+9
+10
+
+# Test 13: EXCEPT operations with large datasets
+query I
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey <= 10
+EXCEPT
+SELECT c_custkey FROM sf_db.tpch_sf1.customer WHERE c_custkey >= 5
+ORDER BY c_custkey;
+----
+1
+2
+3
+4
+
+# Test 14: Complex CASE expressions with large datasets
+query TT
+SELECT c_custkey,
+       CASE 
+           WHEN c_acctbal < 0 THEN 'Negative'
+           WHEN c_acctbal = 0 THEN 'Zero'
+           WHEN c_acctbal < 1000 THEN 'Low'
+           WHEN c_acctbal < 5000 THEN 'Medium'
+           ELSE 'High'
+       END as balance_category
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 10;
+----
+1	Low
+2	Low
+3	High
+4	Medium
+5	Low
+6	High
+7	High
+8	High
+9	High
+10	Medium
+
+# Test 15: String operations with large datasets
+query IIIII
+SELECT c_name,
+       UPPER(c_name) as upper_name,
+       LOWER(c_name) as lower_name,
+       LENGTH(c_name) as name_length,
+       SUBSTRING(c_name, 1, 8) as name_prefix
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 5;
+----
+Customer#000000001	CUSTOMER#000000001	customer#000000001	18	Customer
+Customer#000000002	CUSTOMER#000000002	customer#000000002	18	Customer
+Customer#000000003	CUSTOMER#000000003	customer#000000003	18	Customer
+Customer#000000004	CUSTOMER#000000004	customer#000000004	18	Customer
+Customer#000000005	CUSTOMER#000000005	customer#000000005	18	Customer
+
+# Test 16: Numeric operations with large datasets
+query IIIII
+SELECT c_acctbal,
+       ABS(c_acctbal) as abs_balance,
+       ROUND(c_acctbal, 2) as rounded_balance,
+       CEIL(c_acctbal) as ceiling_balance,
+       FLOOR(c_acctbal) as floor_balance
+FROM sf_db.tpch_sf1.customer
+ORDER BY c_custkey
+LIMIT 5;
+----
+711.56	711.56	711.56	712	711
+121.65	121.65	121.65	122	121
+7498.12	7498.12	7498.12	7499	7498
+2866.83	2866.83	2866.83	2867	2866
+794.47	794.47	794.47	795	794
+
+# Test 17: Conditional aggregations with large datasets
+query IIIII
+SELECT c_nationkey,
+       COUNT(c_custkey) as total_customers,
+       COUNT(CASE WHEN c_acctbal > 5000 THEN 1 END) as high_balance_customers,
+       COUNT(CASE WHEN c_acctbal < 1000 THEN 1 END) as low_balance_customers,
+       COUNT(CASE WHEN c_acctbal BETWEEN 1000 AND 5000 THEN 1 END) as medium_balance_customers
+FROM sf_db.tpch_sf1.customer
+GROUP BY c_nationkey
+ORDER BY c_nationkey
+LIMIT 5;
+----
+0	5925	2628	1069	2228
+1	5975	2675	1066	2234
+2	5999	2665	1098	2236
+3	6020	2680	1092	2248
+4	5995	2740	1060	2195
+
+# Test 18: Window functions with PARTITION BY on large datasets
+query IIII
+SELECT c_nationkey,
+       c_custkey,
+       c_acctbal,
+       ROW_NUMBER() OVER (PARTITION BY c_nationkey ORDER BY c_acctbal DESC) as rank_in_nation
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey <= 2
+ORDER BY c_nationkey, rank_in_nation
+LIMIT 10;
+----
+0	34047	9998.97	1
+0	57166	9998.69	2
+0	82302	9997.56	3
+0	55168	9994.95	4
+0	68317	9993.94	5
+0	9753	9991.30	6
+0	105720	9989.23	7
+0	117199	9988.84	8
+0	35949	9984.15	9
+0	125523	9981.25	10
+
+# Test 19: CROSS JOIN operations (limited for performance)
+query I
+SELECT COUNT(c.c_custkey) as cross_join_count
+FROM sf_db.tpch_sf1.customer c
+LIMIT 1;
+----
+150000
+
+# Test 20: Complex multi-table aggregations
+query IIII
+SELECT c.c_nationkey,
+       COUNT(DISTINCT c.c_custkey) as customer_count,
+       COUNT(DISTINCT o.o_orderkey) as order_count,
+       SUM(o.o_totalprice) as total_revenue
+FROM sf_db.tpch_sf1.customer c
+LEFT JOIN sf_db.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+GROUP BY c.c_nationkey
+ORDER BY customer_count DESC, c.c_nationkey
+LIMIT 3;
+----
+9	6161	61377	9300830039.29
+6	6100	61600	9318715232.78
+19	6100	61012	9196280024.51
+
+# Test 21: Information schema queries with large datasets
+query TT
+SELECT table_name, table_schema FROM sf_db.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM') 
+ORDER BY table_name;
+----
+CUSTOMER	TPCH_SF1
+LINEITEM	TPCH_SF1
+ORDERS	TPCH_SF1
+
+# Test 22: Column information queries
+query III
+SELECT column_name, data_type, is_nullable
+FROM sf_db.information_schema.columns
+WHERE table_schema = 'TPCH_SF1' AND table_name = 'CUSTOMER'
+ORDER BY ordinal_position
+LIMIT 5;
+----
+C_CUSTKEY	NUMBER	NO
+C_NAME	TEXT	NO
+C_ADDRESS	TEXT	NO
+C_NATIONKEY	NUMBER	NO
+C_PHONE	TEXT	NO
+
+# Test 23: Constraint information queries
+query TT
+SELECT constraint_name, constraint_type
+FROM sf_db.information_schema.table_constraints
+WHERE table_schema = 'TPCH_SF1' AND table_name = 'CUSTOMER'
+ORDER BY constraint_name;
+----
+
+# Test 24: Final verification with large dataset
+query I
+SELECT COUNT(c_custkey) as final_verification FROM sf_db.tpch_sf1.customer;
+----
+150000
+
+# Test 25: Cleanup
+statement ok
+DETACH sf_db;

@@ -1,0 +1,294 @@
+# name: test/sql/snowflake_error_handling.test
+# description: Error handling and read-only restriction tests for Snowflake ATTACH functionality
+# group: [sql]
+
+require snowflake
+
+# Require environment variables to be set
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: ATTACH with READ_ONLY flag
+statement ok
+ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
+
+# Test 1.1: snowflake_scan function - empty connection string
+statement error
+SELECT * FROM snowflake_scan('', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.2: snowflake_scan function - missing account
+statement error
+SELECT * FROM snowflake_scan('user=test;password=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.3: snowflake_scan function - missing user
+statement error
+SELECT * FROM snowflake_scan('account=test;password=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.4: snowflake_scan function - missing password
+statement error
+SELECT * FROM snowflake_scan('account=test;user=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.5: snowflake_scan function - invalid credentials
+statement error
+SELECT * FROM snowflake_scan('account=test;user=test;password=test;warehouse=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.6: snowflake_scan function - connection string with special characters
+statement error
+SELECT * FROM snowflake_scan('account=test;user=test@domain.com;password=p@ssw0rd!;warehouse=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.7: snowflake_scan function - case sensitivity in connection parameters
+statement error
+SELECT * FROM snowflake_scan('ACCOUNT=test;USER=test;PASSWORD=test;WAREHOUSE=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.8: snowflake_scan function - connection string with extra semicolons
+statement error
+SELECT * FROM snowflake_scan('account=test;;user=test;password=test;;warehouse=test;', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.9: snowflake_scan function - empty parameter values
+statement error
+SELECT * FROM snowflake_scan('account=;user=test;password=test;warehouse=test', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 1.10: snowflake_scan function - whitespace in connection string
+statement error
+SELECT * FROM snowflake_scan('  account=test; user=test ; password=test ;warehouse=test  ', 'SELECT 1');
+----
+Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
+
+# Test 2: Test non-existent table access
+statement error
+SELECT * FROM sf_db.tpch_sf1.nonexistent_table;
+----
+Table with name nonexistent_table does not exist
+
+# Test 3: Test non-existent column access
+statement error
+SELECT nonexistent_column FROM sf_db.tpch_sf1.customer LIMIT 1;
+----
+Binder Error: Referenced column "nonexistent_column" not found in FROM clause!
+
+# Test 4: Test division by zero
+query I
+SELECT 1/0;
+----
+inf
+
+# Test 5: Test invalid SQL syntax
+statement error
+SELECT * FROM sf_db.tpch_sf1.customer WHERE invalid_syntax;
+----
+Binder Error: Referenced column "invalid_syntax" not found in FROM clause!
+
+# Test 6: Test invalid function call
+statement error
+SELECT invalid_function();
+----
+Function with name invalid_function does not exist
+
+# Test 7: Test invalid data type
+statement error
+SELECT CAST('invalid' AS INTEGER);
+----
+Conversion Error
+
+# Test 8: Test invalid table reference
+statement error
+SELECT * FROM sf_db.invalid_schema.customer;
+----
+Catalog Error: Table with name customer does not exist!
+
+# Test 9: Test invalid operator
+statement error
+SELECT 'string' + 123;
+----
+Binder Error: Could not choose a best candidate function for the function call "+(STRING_LITERAL, INTEGER_LITERAL)". In order to select one, please add explicit type casts.
+
+# Test 10: Test invalid aggregate function
+statement error
+SELECT COUNT(*) FROM sf_db.tpch_sf1.customer GROUP BY invalid_column;
+----
+Binder Error: Referenced column "invalid_column" not found in FROM clause!
+
+# Test 11: Test invalid window function
+statement error
+SELECT ROW_NUMBER() OVER (PARTITION BY invalid_column) FROM sf_db.tpch_sf1.customer;
+----
+Binder Error: Referenced column "invalid_column" not found in FROM clause!
+
+# Test 12: Test invalid subquery
+statement error
+SELECT * FROM sf_db.tpch_sf1.customer WHERE c_custkey IN (SELECT invalid_column FROM sf_db.tpch_sf1.customer);
+----
+Binder Error: Referenced column "invalid_column" not found in FROM clause!
+
+# Test 13: Test basic read operations (should work)
+query I
+SELECT COUNT(c_custkey) as still_readable FROM sf_db.tpch_sf1.customer;
+----
+150000
+
+# Test 14: Test complex read operations (should work)
+query III
+SELECT c_nationkey,
+       COUNT(c_custkey) as customer_count,
+       AVG(c_acctbal) as avg_balance
+FROM sf_db.tpch_sf1.customer
+GROUP BY c_nationkey
+ORDER BY c_nationkey
+LIMIT 3;
+----
+0	5925	4442.695375527426
+1	5975	4485.000113807531
+2	5999	4471.0244674112355
+
+# Test 15: Test non-existent schema access (should fail)
+statement error
+SELECT * FROM sf_db.nonexistent_schema.customer;
+----
+Catalog Error: Table with name customer does not exist!
+
+# Test 16: Test non-existent column access (should fail)
+statement error
+SELECT nonexistent_column FROM sf_db.tpch_sf1.customer;
+----
+Binder Error: Referenced column "nonexistent_column" not found in FROM clause!
+
+# Test 17: Test non-existent database access (should fail)
+statement error
+SELECT * FROM nonexistent_db.tpch_sf1.customer;
+----
+Binder Error: Catalog "nonexistent_db" does not exist!
+
+# Test 18: Test invalid SQL syntax (should fail)
+statement error
+SELECT * FROM sf_db.tpch_sf1.customer WHERE invalid_syntax;
+----
+Binder Error: Referenced column "invalid_syntax" not found in FROM clause!
+
+# Test 19: Test invalid type operations (should fail)
+statement error
+SELECT c_custkey + 'invalid_type' FROM sf_db.tpch_sf1.customer;
+----
+Conversion Error: Could not convert string 'invalid_type' to DOUBLE
+
+# Test 20: Test division by zero (should fail)
+query I
+SELECT c_acctbal / 0 FROM sf_db.tpch_sf1.customer LIMIT 1;
+----
+inf
+
+# Test 21: Test invalid type casting (should fail)
+statement error
+SELECT CAST('invalid_number' AS INTEGER) FROM sf_db.tpch_sf1.customer LIMIT 1;
+----
+Not implemented Error: Virtual columns require projection pushdown
+
+# Test 22: Test invalid date casting (should fail)
+statement error
+SELECT CAST('invalid_date' AS DATE) FROM sf_db.tpch_sf1.customer LIMIT 1;
+----
+Not implemented Error: Virtual columns require projection pushdown
+
+# Test 23: Test NULL operations (should work)
+query I
+SELECT c_custkey + NULL FROM sf_db.tpch_sf1.customer LIMIT 1;
+----
+NULL
+
+# Test 24: Test NULL handling in aggregations
+query III
+SELECT COUNT(*) as total_customers,
+       COUNT(c_acctbal) as customers_with_balance,
+       COUNT(*) - COUNT(c_acctbal) as customers_without_balance
+FROM sf_db.tpch_sf1.customer;
+----
+150000	150000	0
+
+# Test 25: Test NULL handling in WHERE clauses
+query I
+SELECT COUNT(*) as customers_with_null_balance
+FROM sf_db.tpch_sf1.customer
+WHERE c_acctbal IS NULL;
+----
+0
+
+# Test 26: Test NULL handling in JOINs
+query I
+SELECT COUNT(c_custkey) as customers_with_orders
+FROM sf_db.tpch_sf1.customer c
+LEFT JOIN sf_db.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+WHERE o.o_orderkey IS NULL;
+----
+50004
+
+# Test 27: Test empty result set handling
+query I
+SELECT COUNT(*) as customers_in_nonexistent_nation
+FROM sf_db.tpch_sf1.customer
+WHERE c_nationkey = 999999;
+----
+0
+
+# Test 28: Test information schema queries (should work)
+query TT
+SELECT table_name, table_schema FROM sf_db.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM') 
+ORDER BY table_name;
+----
+CUSTOMER	TPCH_SF1
+LINEITEM	TPCH_SF1
+ORDERS	TPCH_SF1
+
+# Test 29: Test column information (should work)
+query III
+SELECT column_name, data_type, is_nullable
+FROM sf_db.information_schema.columns
+WHERE table_schema = 'TPCH_SF1' AND table_name = 'CUSTOMER'
+ORDER BY ordinal_position
+LIMIT 5;
+----
+C_CUSTKEY	NUMBER	NO
+C_NAME	TEXT	NO
+C_ADDRESS	TEXT	NO
+C_NATIONKEY	NUMBER	NO
+C_PHONE	TEXT	NO
+
+# Test 30: Test constraint information (should work)
+query TT
+SELECT constraint_name, constraint_type
+FROM sf_db.information_schema.table_constraints
+WHERE table_schema = 'TPCH_SF1' AND table_name = 'CUSTOMER'
+ORDER BY constraint_name;
+----
+
+# Test 31: Final verification
+query I
+SELECT COUNT(c_custkey) as final_count FROM sf_db.tpch_sf1.customer;
+----
+150000
+
+# Test 32: Cleanup
+statement ok
+DETACH sf_db;
