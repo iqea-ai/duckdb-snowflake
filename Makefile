@@ -26,13 +26,35 @@ download-adbc:
 release-build: download-adbc
 	mkdir -p build/release
 	cmake -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='${PROJ_DIR}extension_config.cmake' \
-		-DCMAKE_BUILD_TYPE=Release -S "./duckdb/" -B build/release
-	cmake --build build/release --config Release
+		-DCMAKE_BUILD_TYPE=Release -G Ninja -S "./duckdb/" -B build/release
+	cmake --build build/release --config Release -j8
 
 # Custom debug target that downloads ADBC and builds  
 .PHONY: debug-build
 debug-build: download-adbc
 	mkdir -p build/debug
 	cmake -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='${PROJ_DIR}extension_config.cmake' \
-		-DCMAKE_BUILD_TYPE=Debug -S "./duckdb/" -B build/debug
-	cmake --build build/debug --config Debug
+		-DCMAKE_BUILD_TYPE=Debug -G Ninja -S "./duckdb/" -B build/debug
+	cmake --build build/debug --config Debug -j8
+
+# CI-specific debug build with explicit Ninja and parallel jobs
+.PHONY: ci-debug-build
+ci-debug-build: download-adbc
+	mkdir -p build/debug
+	cmake -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='${PROJ_DIR}extension_config.cmake' \
+		-DCMAKE_BUILD_TYPE=Debug -G Ninja -S "./duckdb/" -B build/debug
+	cmake --build build/debug --config Debug -j8
+
+# Snowflake-specific test target
+.PHONY: test-snowflake
+test-snowflake: debug-build
+	@echo "Running Snowflake extension tests..."
+	@if [ -z "$$SNOWFLAKE_ACCOUNT" ] || [ -z "$$SNOWFLAKE_USERNAME" ] || [ -z "$$SNOWFLAKE_PASSWORD" ] || [ -z "$$SNOWFLAKE_DATABASE" ]; then \
+		echo "Error: Snowflake environment variables not set. Please set:"; \
+		echo "  SNOWFLAKE_ACCOUNT"; \
+		echo "  SNOWFLAKE_USERNAME"; \
+		echo "  SNOWFLAKE_PASSWORD"; \
+		echo "  SNOWFLAKE_DATABASE"; \
+		exit 1; \
+	fi
+	./build/debug/test/unittest "$(PROJ_DIR)test/sql/snowflake_*.test"

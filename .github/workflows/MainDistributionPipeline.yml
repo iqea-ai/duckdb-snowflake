@@ -38,3 +38,49 @@ jobs:
       ci_tools_version: main
       extension_name: snowflake
       format_checks: 'format;tidy'
+
+  snowflake-tests:
+    name: Snowflake Extension Tests
+    runs-on: ubuntu-latest
+    needs: duckdb-stable-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Download ADBC driver
+        run: make download-adbc
+
+      - name: Build extension with Ninja
+        run: make ci-debug-build
+
+      - name: Run Snowflake tests (if credentials available)
+        if: env.SNOWFLAKE_ACCOUNT != ''
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        run: make test-snowflake
+
+      - name: Skip tests (no credentials)
+        if: env.SNOWFLAKE_ACCOUNT == ''
+        run: |
+          echo "Skipping Snowflake tests - no credentials provided"
+          echo "To enable tests, add the following secrets to the repository:"
+          echo "  SNOWFLAKE_ACCOUNT"
+          echo "  SNOWFLAKE_USERNAME" 
+          echo "  SNOWFLAKE_PASSWORD"
+          echo "  SNOWFLAKE_DATABASE"
