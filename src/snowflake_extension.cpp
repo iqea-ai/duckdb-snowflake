@@ -29,30 +29,22 @@ inline void SnowflakeVersionScalarFun(DataChunk &args, ExpressionState &state, V
 }
 
 // Compatibility layer for different DuckDB versions
-static void LoadInternal(DuckDB &db) {
+static void LoadInternal(ExtensionLoader &loader) {
 	// Register the custom Snowflake secret type
-	RegisterSnowflakeSecretType(*db.instance);
+	RegisterSnowflakeSecretType(loader.GetDatabaseInstance());
 
-	// Register snowflake_version function using DuckDB 1.3.2 API
+	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
-
-	// Register functions using the catalog
-	auto &catalog = Catalog::GetSystemCatalog(*db.instance);
-	auto transaction = CatalogTransaction::GetSystemTransaction(*db.instance);
-	CreateScalarFunctionInfo version_info(std::move(snowflake_version_function));
-	version_info.internal = true;
-	catalog.CreateFunction(transaction, version_info);
+	loader.RegisterFunction(std::move(snowflake_version_function));
 
 #ifdef ADBC_AVAILABLE
 	// Register snowflake_scan table function (only available when ADBC is available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
-	CreateTableFunctionInfo scan_info(std::move(snowflake_scan_function));
-	scan_info.internal = true;
-	catalog.CreateFunction(transaction, scan_info);
+	loader.RegisterFunction(std::move(snowflake_scan_function));
 
 	// Register storage extension (only available when ADBC is available)
-	auto &config = DBConfig::GetConfig(*db.instance);
+	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.storage_extensions["snowflake"] = make_uniq<snowflake::SnowflakeStorageExtension>();
 #else
 	// ADBC not available - register a placeholder function that throws an error
@@ -61,14 +53,12 @@ static void LoadInternal(DuckDB &db) {
 		    throw NotImplementedException(
 		        "snowflake_scan is not available on this platform (ADBC driver not supported)");
 	    });
-	CreateTableFunctionInfo scan_info(std::move(snowflake_scan_function));
-	scan_info.internal = true;
-	catalog.CreateFunction(transaction, scan_info);
+	loader.RegisterFunction(std::move(snowflake_scan_function));
 #endif
 }
 
-void SnowflakeExtension::Load(DuckDB &db) {
-	LoadInternal(db);
+void SnowflakeExtension::Load(ExtensionLoader &loader) {
+	LoadInternal(loader);
 }
 std::string SnowflakeExtension::Name() {
 	return "snowflake";
@@ -87,12 +77,17 @@ std::string SnowflakeExtension::Version() const {
 extern "C" {
 
 DUCKDB_EXTENSION_API void snowflake_init(duckdb::DatabaseInstance &db) {
-	duckdb::DuckDB db_wrapper(db);
-	duckdb::LoadInternal(db_wrapper);
+	duckdb::ExtensionLoader loader(db, "snowflake");
+	duckdb::LoadInternal(loader);
 }
 
 DUCKDB_EXTENSION_API const char *snowflake_version() {
 	return duckdb::DuckDB::LibraryVersion();
+}
+
+// C++ extension entry point for loadable extensions
+DUCKDB_CPP_EXTENSION_ENTRY(snowflake, loader) {
+	duckdb::LoadInternal(loader);
 }
 }
 

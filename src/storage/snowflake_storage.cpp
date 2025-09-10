@@ -9,9 +9,9 @@
 namespace duckdb {
 namespace snowflake {
 
-static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, ClientContext &context,
+static unique_ptr<Catalog> SnowflakeAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
                                            AttachedDatabase &db, const string &name, AttachInfo &info,
-                                           AccessMode access_mode) {
+                                           AttachOptions &options) {
 	DPRINT("SnowflakeAttach called with name: %s\n", name.c_str());
 
 	SnowflakeConfig config;
@@ -45,7 +45,7 @@ static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, C
 		                            "or ATTACH '' AS name (TYPE snowflake, SECRET secret_name)");
 	}
 
-	if (access_mode != AccessMode::READ_ONLY) {
+	if (options.access_mode != AccessMode::READ_ONLY) {
 		throw NotImplementedException("Snowflake currently only supports read-only access");
 	}
 

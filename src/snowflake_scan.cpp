@@ -62,8 +62,12 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 
 	// Use DuckDB's Arrow integration to populate the table type information
 	// This converts Arrow schema to DuckDB types and handles all type mappings
-	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), bind_data->arrow_table,
-	                                           bind_data->schema_root, names, return_types);
+        ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), bind_data->arrow_table,
+	                                           bind_data->schema_root.arrow_schema);
+	
+	// Get the types and names from the populated ArrowTableSchema
+	return_types = bind_data->arrow_table.GetTypes();
+	names = bind_data->arrow_table.GetNames();
 	bind_data->all_types = return_types;
 
 	DPRINT("SnowflakeScanBind returning bind data\n");
