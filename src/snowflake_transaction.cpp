@@ -39,7 +39,7 @@ void SnowflakeTransactionManager::Checkpoint(ClientContext &context, bool force)
 	// This is a no-op for Snowflake
 }
 
-unique_ptr<TransactionManager> SnowflakeCreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info,
+unique_ptr<TransactionManager> SnowflakeCreateTransactionManager(StorageExtensionInfo *storage_info,
                                                                  AttachedDatabase &db, Catalog &catalog) {
 	return make_uniq<SnowflakeTransactionManager>(db);
 }

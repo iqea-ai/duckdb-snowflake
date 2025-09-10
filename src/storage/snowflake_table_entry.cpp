@@ -36,12 +36,10 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
 
 	// Use the new DuckDB API to populate the arrow table schema
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
-	                                             snowflake_bind_data->schema_root.arrow_schema);
-
-	// Get the column names and types from the arrow table
-	vector<string> &names = snowflake_bind_data->arrow_table.GetNames();
-	vector<LogicalType> &return_types = snowflake_bind_data->arrow_table.GetTypes();
+	vector<string> names;
+	vector<LogicalType> return_types;
+	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
+	                                           snowflake_bind_data->schema_root, names, return_types);
 	snowflake_bind_data->all_types = return_types;
 
 	// Populate columns if not already loaded (first time accessing this table)

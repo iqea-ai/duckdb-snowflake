@@ -561,13 +561,11 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	schema_wrapper.arrow_schema = schema;
 
 	// Use the new DuckDB API to populate the arrow table schema
-	ArrowTableSchema arrow_table;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
-	                                             schema_wrapper.arrow_schema);
-
-	// Get the column names and types from the arrow table
-	vector<string> &actual_names = arrow_table.GetNames();
-	vector<LogicalType> &actual_types = arrow_table.GetTypes();
+	ArrowTableType arrow_table;
+	vector<string> actual_names;
+	vector<LogicalType> actual_types;
+	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table,
+	                                           schema_wrapper, actual_names, actual_types);
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +
