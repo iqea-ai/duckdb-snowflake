@@ -470,12 +470,12 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 			ArrowArray *column = arrow_array.children[col_idx];
 			if (column && column->buffers && column->n_buffers >= 3) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
-				const int32_t *offsets = (const int32_t *)column->buffers[1];
-				const char *data = (const char *)column->buffers[2];
+				const int32_t *offsets = static_cast<const int32_t *>(column->buffers[1]);
+				const char *data = static_cast<const char *>(column->buffers[2]);
 				const uint8_t *validity = nullptr;
 
 				if (column->buffers[0]) {
-					validity = (const uint8_t *)column->buffers[0];
+					validity = static_cast<const uint8_t *>(column->buffers[0]);
 				}
 
 				for (int64_t row_idx = 0; row_idx < column->length; row_idx++) {
@@ -561,11 +561,12 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	schema_wrapper.arrow_schema = schema;
 
 	// Use the new DuckDB API to populate the arrow table schema
-        ArrowTableSchema arrow_table;
+	ArrowTableSchema arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table, schema_wrapper.arrow_schema);
-	
+	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
+	                                             schema_wrapper.arrow_schema);
+
 	// Get the types and names from the populated ArrowTableSchema
 	actual_types = arrow_table.GetTypes();
 	actual_names = arrow_table.GetNames();
