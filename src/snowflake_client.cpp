@@ -564,8 +564,8 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	ArrowTableType arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table,
-	                                           schema_wrapper, actual_names, actual_types);
+	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table, schema_wrapper, actual_names,
+	                                           actual_types);
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +

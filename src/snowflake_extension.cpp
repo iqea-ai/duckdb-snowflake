@@ -36,11 +36,10 @@ static void LoadInternal(DuckDB &db) {
 	// Register snowflake_version function using DuckDB 1.3.2 API
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
-	
+
 	// Register functions using the catalog
 	auto &catalog = Catalog::GetSystemCatalog(*db.instance);
 	auto transaction = CatalogTransaction::GetSystemTransaction(*db.instance);
-	
 	CreateScalarFunctionInfo version_info(std::move(snowflake_version_function));
 	version_info.internal = true;
 	catalog.CreateFunction(transaction, version_info);
