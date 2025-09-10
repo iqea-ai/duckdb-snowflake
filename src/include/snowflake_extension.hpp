@@ -7,9 +7,9 @@ namespace duckdb {
 
 class SnowflakeExtension : public Extension {
 public:
-	void Load(DuckDB &db) override;
-	std::string Name() override;
-	std::string Version() const override;
+	void Load(DuckDB &db);
+	std::string Name();
+	std::string Version() const;
 };
 
 } // namespace duckdb
