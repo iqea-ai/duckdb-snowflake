@@ -26,7 +26,7 @@ jobs:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
-      duckdb_version: b354bfeff4add9cce265c4eea17bd4c4f3d093e0
+      duckdb_version: 0b83e5d2f68bc02dfefde74b846bd039f078affa
       ci_tools_version: main
       extension_name: snowflake
 
@@ -34,7 +34,7 @@ jobs:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
     with:
-      duckdb_version: b354bfeff4add9cce265c4eea17bd4c4f3d093e0
+      duckdb_version: 0b83e5d2f68bc02dfefde74b846bd039f078affa
       ci_tools_version: main
       extension_name: snowflake
       format_checks: 'format;tidy'
