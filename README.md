@@ -305,3 +305,4 @@ For issues or questions:
 ### For Developers
 
 If you want to build the extension from source or contribute to development, see [BUILD.md](BUILD.md) for detailed build instructions and development guidelines.# Trigger new workflow run
+# Test build with DuckDB 1.4.0
