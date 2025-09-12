@@ -130,7 +130,7 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	// Try multiple locations for the driver
 	std::vector<std::string> search_paths;
 
-	// 1. Try the extension directory
+	// 1. Try the extension directory (for packaged extensions with driver)
 	std::string extension_dir = GetExtensionDirectory();
 	search_paths.push_back(extension_dir + "/" + SNOWFLAKE_ADBC_LIB);
 

@@ -46,6 +46,62 @@ ci-debug-build: download-adbc
 	# Use fewer parallel jobs to avoid memory issues on GitHub runners
 	cmake --build build/debug --config Debug -j4
 
+# Package extension with ADBC driver
+.PHONY: package-with-driver
+package-with-driver: release
+	@echo "Packaging extension with ADBC driver..."
+	@python3 scripts/package_extension_with_driver.py --build-dir build/release
+	@echo "Package created successfully!"
+
+# Package debug build with ADBC driver
+.PHONY: package-debug-with-driver
+package-debug-with-driver: debug
+	@echo "Packaging debug extension with ADBC driver..."
+	@python3 scripts/package_extension_with_driver.py --build-dir build/debug
+	@echo "Debug package created successfully!"
+
+# Validate existing packages
+.PHONY: validate-packages
+validate-packages:
+	@echo "Validating existing packages..."
+	@python3 scripts/package_extension_with_driver.py --validate-only
+
+# Test the packaged extension (uses existing package if available)
+.PHONY: test-package
+test-package:
+	@echo "Testing packaged extension..."
+	@if [ ! -f build/packages/snowflake-extension-*.zip ]; then \
+		echo "No package found. Creating one first..."; \
+		make package-with-driver; \
+	fi
+	@mkdir -p test_package
+	@cd test_package && unzip -q ../build/packages/snowflake-extension-*.zip
+	@echo "Package extracted successfully!"
+	@echo "To test manually:"
+	@echo "1. cd test_package"
+	@echo "2. Copy 'snowflake' directory to your DuckDB extensions location"
+	@echo "3. Run: LOAD 'snowflake/snowflake.duckdb_extension'"
+
+# Test existing package without rebuilding
+.PHONY: test-existing-package
+test-existing-package:
+	@echo "Testing existing packaged extension..."
+	@if [ ! -f build/packages/snowflake-extension-*.zip ]; then \
+		echo "No package found at build/packages/snowflake-extension-*.zip"; \
+		echo "Run 'make package-with-driver' or 'make package-debug-with-driver' first"; \
+		exit 1; \
+	fi
+	@mkdir -p test_package
+	@cd test_package && unzip -q ../build/packages/snowflake-extension-*.zip
+	@echo "Package extracted successfully!"
+	@echo "Package contents:"
+	@ls -la test_package/snowflake/
+	@echo ""
+	@echo "To test manually:"
+	@echo "1. cd test_package"
+	@echo "2. Copy 'snowflake' directory to your DuckDB extensions location"
+	@echo "3. Run: LOAD 'snowflake/snowflake.duckdb_extension'"
+
 # Snowflake-specific test target
 .PHONY: test-snowflake
 test-snowflake: debug-build
