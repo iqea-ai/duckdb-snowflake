@@ -46,14 +46,14 @@ jobs:
           mkdir -p dist
           cp artifacts/snowflake.duckdb_extension dist/
           cp adbc_drivers/libadbc_driver_snowflake.so dist/
-          zip -r snowflake-extension-with-driver-linux_amd64.zip dist/
+          zip -r snowflake-extension-with-driver-duckdb-1.4-linux_amd64.zip dist/
           ls -la dist/
 
       - name: Upload packaged extension
         uses: actions/upload-artifact@v4
         with:
-          name: snowflake-extension-with-driver-linux_amd64
-          path: snowflake-extension-with-driver-linux_amd64.zip
+          name: snowflake-extension-with-driver-duckdb-1.4-linux_amd64
+          path: snowflake-extension-with-driver-duckdb-1.4-linux_amd64.zip
 
   code-quality-check:
     name: Code Quality Check
