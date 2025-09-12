@@ -4,6 +4,9 @@ PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 EXT_NAME=snowflake
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
+# Note: For MinGW Windows builds, the CMakeLists.txt automatically configures
+# vcpkg to use Ninja generator to fix OpenSSL build issues
+
 # Check if ADBC driver exists before including the main makefile
 ADBC_DRIVER_EXISTS := $(shell test -f adbc_drivers/libadbc_driver_snowflake.so && echo 1 || echo 0)
 
