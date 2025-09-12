@@ -6,6 +6,20 @@ project(${TARGET_NAME})
 include_directories(src/include)
 include_directories(third_party)
 
+# Configure build system for MinGW Windows builds
+# Force Ninja generator for MinGW builds to fix OpenSSL build issues
+# This helps avoid make install DESTDIR problems on MinGW
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(STATUS "Detected MinGW build - configuring Ninja generator for OpenSSL compatibility")
+    # Set environment variable to suggest Ninja to vcpkg
+    set(ENV{VCPKG_CMAKE_GENERATOR} "Ninja")
+    # Also set CMAKE_GENERATOR for this project if not already set
+    if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
+        message(STATUS "Setting CMAKE_GENERATOR to Ninja for MinGW build")
+        set(CMAKE_GENERATOR "Ninja" CACHE STRING "CMake generator" FORCE)
+    endif()
+endif()
+
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
 # Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
