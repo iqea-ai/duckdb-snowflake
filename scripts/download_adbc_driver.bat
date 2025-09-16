@@ -1,9 +1,9 @@
 @echo off
 REM Download pre-built ADBC Snowflake driver for Windows
-REM Version 1.7.0 from ADBC release 19
+REM Version 1.8.0 from ADBC release 20
 
-set ADBC_VERSION=apache-arrow-adbc-19
-set DRIVER_VERSION=1.7.0
+set ADBC_VERSION=apache-arrow-adbc-20
+set DRIVER_VERSION=1.8.0
 set BASE_URL=https://github.com/apache/arrow-adbc/releases/download/%ADBC_VERSION%
 
 echo Detected platform: Windows
