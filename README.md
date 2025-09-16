@@ -63,6 +63,10 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 ## Installation
 
+### Prerequisites
+
+The DuckDB Snowflake extension requires the `libadbc_driver_snowflake.so` library to function properly. This library is **not included** in the extension package and must be obtained separately.
+
 ### Method 1: From DuckDB Community Extensions (Recommended)
 
 ```sql
@@ -70,6 +74,8 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 INSTALL snowflake FROM community;
 LOAD snowflake;
 ```
+
+**Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
 
 ### Method 2: Manual Installation
 
@@ -80,6 +86,135 @@ wget https://github.com/your-org/duckdb-snowflake/releases/latest/download/snowf
 # Load in DuckDB
 LOAD 'path/to/snowflake.duckdb_extension';
 ```
+
+**Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
+
+## ADBC Driver Setup
+
+The Snowflake extension requires the Apache Arrow ADBC Snowflake driver to communicate with Snowflake servers. Download the appropriate driver for your platform:
+
+### Supported Platforms
+
+- **Linux x86_64** (`linux_amd64`)
+- **Linux ARM64** (`linux_arm64`) 
+- **Linux x86_64 (musl)** (`linux_amd64_musl`)
+- **macOS x86_64** (`osx_amd64`)
+- **macOS ARM64** (`osx_arm64`)
+- **Windows x86_64** (`windows_amd64`)
+- **Windows x86_64 (MinGW)** (`windows_amd64_mingw`)
+
+### Download Instructions
+
+The ADBC Snowflake driver is distributed as Python wheel files. You need to download the appropriate wheel and extract the shared library from it.
+
+**Automated Download (Recommended):**
+If you have the source code, you can use the provided script:
+```bash
+# From the extension source directory
+make download-adbc
+```
+
+**Manual Download:**
+If you prefer to download manually, follow the platform-specific instructions below:
+
+**For macOS (ARM64):**
+```bash
+# Download the Python wheel
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_11_0_arm64.whl
+
+# Extract the shared library
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
+
+**For macOS (x86_64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_10_15_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
+
+**For Linux (x86_64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
+
+**For Linux (ARM64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
+
+**For Linux (x86_64 musl):**
+```bash
+# Note: Use the standard Linux x86_64 wheel for musl systems
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
+
+**For Windows (x86_64):**
+```cmd
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+powershell Expand-Archive -Path adbc_driver_snowflake.whl -DestinationPath temp_extract
+move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rmdir /s temp_extract
+del adbc_driver_snowflake.whl
+```
+
+**For Windows (x86_64 MinGW):**
+```cmd
+# Note: Use the standard Windows x86_64 wheel for MinGW systems
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+powershell Expand-Archive -Path adbc_driver_snowflake.whl -DestinationPath temp_extract
+move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rmdir /s temp_extract
+del adbc_driver_snowflake.whl
+```
+
+### Driver Placement
+
+The extension searches for the driver in these locations (in order):
+1. Extension directory: `./libadbc_driver_snowflake.so`
+2. Extension subdirectory: `./adbc_drivers/libadbc_driver_snowflake.so`
+3. Build directory: `./adbc_drivers/libadbc_driver_snowflake.so`
+4. System paths: `/usr/local/lib/` or `/usr/lib/`
+
+**Recommended approach:**
+```bash
+# Create the adbc_drivers directory next to your DuckDB binary
+mkdir -p adbc_drivers
+mv libadbc_driver_snowflake.so adbc_drivers/
+```
+
+### Verification
+
+Test that the driver is found:
+```sql
+LOAD snowflake;
+SELECT snowflake_version();
+-- Should return: "Snowflake Extension v0.1.0"
+```
+
+### Troubleshooting
+
+**If you get "ADBC driver not supported" error:**
+- Verify the driver file is in the correct location
+- Check file permissions (should be executable)
+- Ensure you downloaded the correct architecture for your platform
+
+**If you get "Driver not found" debug messages:**
+- The extension will search multiple locations automatically
+- Check the debug output to see which paths it's checking
+- Place the driver in one of the searched locations
 
 ## Configuration
 
