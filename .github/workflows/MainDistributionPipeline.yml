@@ -20,6 +20,7 @@ jobs:
       duckdb_version: 0b83e5d2f68bc02dfefde74b846bd039f078affa
       ci_tools_version: main
       extension_name: snowflake
+      exclude_sha_from_name: true
 
   code-quality-check:
     name: Code Quality Check
