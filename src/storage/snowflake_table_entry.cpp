@@ -48,7 +48,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 
 	// Populate columns if not already loaded (first time accessing this table)
 	if (!columns_loaded) {
-		for (idx_t i = 0; i < names.size(); i++) {
+		for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
 			DPRINT("  Column: %s, Type: %s\n", names[i].c_str(), return_types[i].ToString().c_str());
 			columns.AddColumn(ColumnDefinition(names[i], return_types[i]));
 		}

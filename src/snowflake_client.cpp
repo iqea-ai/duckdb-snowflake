@@ -435,7 +435,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 	schema_wrapper.arrow_schema = schema;
 
 	if (!expected_col_names.empty()) {
-		if (schema.n_children != static_cast<int64_t>(expected_col_names.size())) {
+		if (static_cast<size_t>(schema.n_children) != expected_col_names.size()) {
 			throw IOException("Expected " + to_string(expected_col_names.size()) + " columns but got " +
 			                  to_string(schema.n_children));
 		}
@@ -449,7 +449,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 		}
 	}
 
-	vector<vector<string>> results(schema.n_children);
+	vector<vector<string>> results(static_cast<size_t>(schema.n_children));
 
 	while (true) {
 		ArrowArray arrow_array;
@@ -466,7 +466,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 		ArrowArrayWrapper array_wrapper;
 		array_wrapper.arrow_array = arrow_array;
 
-		for (idx_t col_idx = 0; col_idx < arrow_array.n_children; col_idx++) {
+		for (idx_t col_idx = 0; col_idx < static_cast<idx_t>(arrow_array.n_children); col_idx++) {
 			ArrowArray *column = arrow_array.children[col_idx];
 			if (column && column->buffers && column->n_buffers >= 3) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
@@ -605,7 +605,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 			DPRINT("Arrow array is all nulls!\n");
 		}
 
-		for (int64_t i = 0; i < arrow_array.n_children; i++) {
+		for (int64_t i = 0; i < static_cast<int64_t>(arrow_array.n_children); i++) {
 			if (arrow_array.children[i]) {
 				DPRINT("Child %lld: length=%lld, null_count=%lld\n", i, arrow_array.children[i]->length,
 				       arrow_array.children[i]->null_count);
