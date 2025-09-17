@@ -23,9 +23,47 @@ jobs:
 
   package-extension-with-driver:
     name: Build complete extension package
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: duckdb-main-build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver-stable')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver-stable')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux platforms
+          - duckdb_arch: linux_amd64
+            runner: ubuntu-24.04
+            platform_name: linux_amd64
+          - duckdb_arch: linux_arm64
+            runner: ubuntu-24.04-arm
+            platform_name: linux_arm64
+          - duckdb_arch: linux_amd64_musl
+            runner: ubuntu-24.04
+            platform_name: linux_amd64_musl
+          # macOS platforms
+          - duckdb_arch: osx_amd64
+            runner: macos-14
+            platform_name: osx_amd64
+          - duckdb_arch: osx_arm64
+            runner: macos-14
+            platform_name: osx_arm64
+          # Windows platforms
+          - duckdb_arch: windows_amd64
+            runner: windows-latest
+            platform_name: windows_amd64
+          - duckdb_arch: windows_amd64_mingw
+            runner: windows-latest
+            platform_name: windows_amd64_mingw
+          # WebAssembly platforms (skip - they don't need native ADBC drivers)
+          # - duckdb_arch: wasm_mvp
+          #   runner: ubuntu-24.04
+          #   platform_name: wasm_mvp
+          # - duckdb_arch: wasm_eh
+          #   runner: ubuntu-24.04
+          #   platform_name: wasm_eh
+          # - duckdb_arch: wasm_threads
+          #   runner: ubuntu-24.04
+          #   platform_name: wasm_threads
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,25 +73,35 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: snowflake-main-extension-linux_amd64
+          name: snowflake-main-extension-${{ matrix.duckdb_arch }}
           path: artifacts/
 
       - name: Download ADBC driver
         run: make download-adbc
 
-      - name: Package extension with driver
+      - name: Package extension with driver (Linux/macOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         run: |
           mkdir -p dist
           cp artifacts/snowflake.duckdb_extension dist/
           cp adbc_drivers/libadbc_driver_snowflake.so dist/
-          zip -r snowflake-extension-with-driver-duckdb-1.4-linux_amd64.zip dist/
+          zip -r snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip dist/
           ls -la dist/
+
+      - name: Package extension with driver (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir dist
+          copy artifacts\snowflake.duckdb_extension dist\
+          copy adbc_drivers\libadbc_driver_snowflake.so dist\
+          powershell Compress-Archive -Path dist\* -DestinationPath snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip
+          dir dist
 
       - name: Upload packaged extension
         uses: actions/upload-artifact@v4
         with:
-          name: snowflake-duckdb-1.4-linux_amd64
-          path: snowflake-extension-with-driver-duckdb-1.4-linux_amd64.zip
+          name: snowflake-extension-1.4-${{ matrix.platform_name }}
+          path: snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip
 
   code-quality-check:
     name: Code Quality Check
@@ -68,7 +116,7 @@ jobs:
     name: Snowflake Extension Tests
     runs-on: ubuntu-latest
     needs: duckdb-main-build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver-stable')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver-stable')
     timeout-minutes: 60
     steps:
       - name: Checkout repository
