@@ -39,7 +39,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	vector<string> names;
 	vector<LogicalType> return_types;
 	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
-	                                            snowflake_bind_data->schema_root.arrow_schema);
+	                                             snowflake_bind_data->schema_root.arrow_schema);
 	names = snowflake_bind_data->arrow_table.GetNames();
 	return_types = snowflake_bind_data->arrow_table.GetTypes();
 	snowflake_bind_data->all_types = return_types;

@@ -40,7 +40,7 @@ void SnowflakeTransactionManager::Checkpoint(ClientContext &context, bool force)
 }
 
 unique_ptr<TransactionManager> SnowflakeCreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info,
-                                                               AttachedDatabase &db, Catalog &catalog) {
+                                                                 AttachedDatabase &db, Catalog &catalog) {
 	return make_uniq<SnowflakeTransactionManager>(db);
 }
 

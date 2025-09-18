@@ -10,8 +10,8 @@ namespace duckdb {
 namespace snowflake {
 
 static unique_ptr<Catalog> SnowflakeAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
-                                          AttachedDatabase &db, const string &name, AttachInfo &info,
-                                          AttachOptions &options) {
+                                           AttachedDatabase &db, const string &name, AttachInfo &info,
+                                           AttachOptions &options) {
 	DPRINT("SnowflakeAttach called with name: %s\n", name.c_str());
 
 	SnowflakeConfig config;

@@ -564,7 +564,8 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	ArrowTableSchema arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table, schema_wrapper.arrow_schema);
+	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
+	                                             schema_wrapper.arrow_schema);
 	actual_names = arrow_table.GetNames();
 	actual_types = arrow_table.GetTypes();
 
