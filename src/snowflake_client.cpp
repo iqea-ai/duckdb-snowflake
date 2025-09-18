@@ -478,7 +478,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 					validity = static_cast<const uint8_t *>(column->buffers[0]);
 				}
 
-				for (int64_t row_idx = 0; row_idx < column->length; row_idx++) {
+				for (int64_t row_idx = 0; row_idx < static_cast<int64_t>(column->length); row_idx++) {
 					if (validity && column->null_count > 0) {
 						size_t byte_idx = static_cast<size_t>(row_idx) / 8;
 						size_t bit_idx = static_cast<size_t>(row_idx) % 8;
@@ -564,8 +564,8 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	ArrowTableType arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table,
-	                                           schema_wrapper, actual_names, actual_types);
+	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table, schema_wrapper, actual_names,
+	                                           actual_types);
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +
