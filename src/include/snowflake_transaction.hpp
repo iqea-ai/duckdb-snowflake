@@ -30,8 +30,8 @@ private:
 };
 
 // Storage extension transaction manager factory function
-unique_ptr<TransactionManager> SnowflakeCreateTransactionManager(StorageExtensionInfo *storage_info,
-                                                                 AttachedDatabase &db, Catalog &catalog);
+unique_ptr<TransactionManager> SnowflakeCreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info,
+                                                               AttachedDatabase &db, Catalog &catalog);
 
 } // namespace snowflake
 } // namespace duckdb
