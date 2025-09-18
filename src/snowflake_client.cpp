@@ -468,7 +468,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 
 		for (idx_t col_idx = 0; col_idx < arrow_array.n_children; col_idx++) {
 			ArrowArray *column = arrow_array.children[col_idx];
-			if (column && column->buffers && column->n_buffers >= 3) {
+			if (column && column->buffers && column->n_buffers >= 3L) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
 				const int32_t *offsets = static_cast<const int32_t *>(column->buffers[1]);
 				const char *data = static_cast<const char *>(column->buffers[2]);
