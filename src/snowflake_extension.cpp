@@ -14,6 +14,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_transaction.hpp"
+#include "duckdb/main/extension_util.hpp"
 #include "snowflake_secret_provider.hpp"
 
 namespace duckdb {
@@ -29,22 +30,24 @@ inline void SnowflakeVersionScalarFun(DataChunk &args, ExpressionState &state, V
 }
 
 // Compatibility layer for different DuckDB versions
-static void LoadInternal(ExtensionLoader &loader) {
+static void LoadInternal(DatabaseInstance &instance) {
 	// Register the custom Snowflake secret type
-	RegisterSnowflakeSecretType(loader.GetDatabaseInstance());
+	RegisterSnowflakeSecretType(instance);
 
 	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
-	loader.RegisterFunction(std::move(snowflake_version_function));
+	CreateScalarFunctionInfo snowflake_version_info(snowflake_version_function);
+	ExtensionUtil::RegisterFunction(instance, std::move(snowflake_version_info));
 
 #ifdef ADBC_AVAILABLE
 	// Register snowflake_scan table function (only available when ADBC is available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
-	loader.RegisterFunction(std::move(snowflake_scan_function));
+	CreateTableFunctionInfo snowflake_scan_info(snowflake_scan_function);
+	ExtensionUtil::RegisterFunction(instance, std::move(snowflake_scan_info));
 
 	// Register storage extension (only available when ADBC is available)
-	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
+	auto &config = DBConfig::GetConfig(instance);
 	config.storage_extensions["snowflake"] = make_uniq<snowflake::SnowflakeStorageExtension>();
 #else
 	// ADBC not available - register a placeholder function that throws an error
@@ -53,12 +56,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 		    throw NotImplementedException(
 		        "snowflake_scan is not available on this platform (ADBC driver not supported)");
 	    });
-	loader.RegisterFunction(std::move(snowflake_scan_function));
+	CreateTableFunctionInfo snowflake_scan_info(snowflake_scan_function);
+	ExtensionUtil::RegisterFunction(instance, std::move(snowflake_scan_info));
 #endif
 }
 
-void SnowflakeExtension::Load(ExtensionLoader &loader) {
-	LoadInternal(loader);
+void SnowflakeExtension::Load(DuckDB &db) {
+	LoadInternal(*db.instance);
 }
 std::string SnowflakeExtension::Name() {
 	return "snowflake";
@@ -77,8 +81,7 @@ std::string SnowflakeExtension::Version() const {
 extern "C" {
 
 DUCKDB_EXTENSION_API void snowflake_init(duckdb::DatabaseInstance &db) {
-	duckdb::ExtensionLoader loader(db, "snowflake");
-	duckdb::LoadInternal(loader);
+	duckdb::LoadInternal(db);
 }
 
 DUCKDB_EXTENSION_API const char *snowflake_version() {
@@ -86,9 +89,13 @@ DUCKDB_EXTENSION_API const char *snowflake_version() {
 }
 
 // C++ extension entry point for loadable extensions
-DUCKDB_CPP_EXTENSION_ENTRY(snowflake, loader) {
-	duckdb::LoadInternal(loader);
+#ifdef DUCKDB_BUILD_LOADABLE_EXTENSION
+extern "C" {
+DUCKDB_EXTENSION_API void snowflake_init_cpp(duckdb::DatabaseInstance &db) {
+	duckdb::LoadInternal(db);
 }
+}
+#endif
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN
