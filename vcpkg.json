@@ -1,10 +1,16 @@
 {
         "dependencies": [
-                "openssl"
+                {
+                        "name": "openssl",
+                        "features": []
+                }
         ],
         "vcpkg-configuration": {
                 "overlay-ports": [
                         "./extension-ci-tools/vcpkg_ports"
-                ]
+                ],
+                "default-features": [],
+                "registries": [],
+                "overlay-triplets": []
         }
 }

@@ -56,9 +56,9 @@ jobs:
           - duckdb_arch: windows_amd64
             runner: windows-latest
             platform_name: windows_amd64
-          # - duckdb_arch: windows_amd64_mingw
-          #   runner: windows-latest
-          #   platform_name: windows_amd64_mingw
+          - duckdb_arch: windows_amd64_mingw
+            runner: windows-latest
+            platform_name: windows_amd64_mingw
           # WebAssembly platforms (skip - they don't need native ADBC drivers)
           # - duckdb_arch: wasm_mvp
           #   runner: ubuntu-24.04

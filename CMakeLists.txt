@@ -3,10 +3,20 @@ cmake_minimum_required(VERSION 3.5)
 # Configure vcpkg for MinGW builds BEFORE project() call
 # This must be done before any project() calls to ensure vcpkg uses the right generator
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    message(STATUS "Detected MinGW build - setting vcpkg environment variables early")
+    message(STATUS "Detected MinGW build - setting comprehensive vcpkg environment variables")
+    
+    # Set vcpkg environment variables
     set(ENV{VCPKG_CMAKE_GENERATOR} "Ninja")
     set(ENV{VCPKG_USE_NINJA} "ON")
     set(ENV{VCPKG_FORCE_SYSTEM_BINARIES} "OFF")
+    set(ENV{VCPKG_DEFAULT_TRIPLET} "x64-mingw-static")
+    
+    # Additional environment variables to help with MinGW builds
+    set(ENV{VCPKG_OVERLAY_PORTS} "${CMAKE_CURRENT_SOURCE_DIR}/extension-ci-tools/vcpkg_ports")
+    set(ENV{VCPKG_BINARY_SOURCES} "clear;x-gha,readwrite")
+    
+    # Set toolchain file for MinGW
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 endif()
 
 # Set extension name here
