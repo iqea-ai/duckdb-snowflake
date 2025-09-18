@@ -1,23 +1,33 @@
 cmake_minimum_required(VERSION 3.5)
 
+# Configure vcpkg for MinGW builds BEFORE project() call
+# This must be done before any project() calls to ensure vcpkg uses the right generator
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(STATUS "Detected MinGW build - setting vcpkg environment variables early")
+    set(ENV{VCPKG_CMAKE_GENERATOR} "Ninja")
+    set(ENV{VCPKG_USE_NINJA} "ON")
+    set(ENV{VCPKG_FORCE_SYSTEM_BINARIES} "OFF")
+endif()
+
 # Set extension name here
 set(TARGET_NAME snowflake)
 project(${TARGET_NAME})
 include_directories(src/include)
 include_directories(third_party)
 
-# Configure build system for MinGW Windows builds
-# Force Ninja generator for MinGW builds to fix OpenSSL build issues
-# This helps avoid make install DESTDIR problems on MinGW
+# Additional MinGW-specific configuration (environment variables set above)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    message(STATUS "Detected MinGW build - configuring Ninja generator for OpenSSL compatibility")
-    # Set environment variable to suggest Ninja to vcpkg
-    set(ENV{VCPKG_CMAKE_GENERATOR} "Ninja")
-    # Also set CMAKE_GENERATOR for this project if not already set
+    message(STATUS "Applying additional MinGW-specific build configuration")
+    
+    # Set CMAKE_GENERATOR to Ninja if not already set
     if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
         message(STATUS "Setting CMAKE_GENERATOR to Ninja for MinGW build")
         set(CMAKE_GENERATOR "Ninja" CACHE STRING "CMake generator" FORCE)
     endif()
+    
+    # Additional MinGW-specific flags to help with OpenSSL build
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_WIN32_WINNT=0x0601")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_WIN32_WINNT=0x0601")
 endif()
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
