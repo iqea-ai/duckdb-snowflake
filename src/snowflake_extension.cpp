@@ -39,7 +39,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(std::move(snowflake_version_function));
 
 #ifdef ADBC_AVAILABLE
-	// Register snowflake_scan table function (only available when ADBC is available)
+	// Register snowflake_scan table function with pushdown (only available when ADBC is available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
 	loader.RegisterFunction(std::move(snowflake_scan_function));
 
@@ -61,7 +61,7 @@ void SnowflakeExtension::Load(ExtensionLoader &loader) {
 	LoadInternal(loader);
 }
 std::string SnowflakeExtension::Name() {
-	return "snowflake";
+	return "snowflake_pushdown";
 }
 
 std::string SnowflakeExtension::Version() const {

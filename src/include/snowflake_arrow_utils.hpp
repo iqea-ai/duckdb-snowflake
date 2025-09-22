@@ -4,9 +4,15 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/common/adbc/adbc.h"
+#include "duckdb/function/table_function.hpp"
+#include "duckdb/common/types.hpp"
+#include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 
 #include <utility>
+#include <string>
+#include <vector>
 #include "snowflake_client_manager.hpp"
+#include "snowflake_query_builder.hpp"
 
 namespace duckdb {
 
@@ -24,6 +30,19 @@ struct SnowflakeArrowStreamFactory {
 	AdbcStatement statement;
 	bool statement_initialized = false;
 
+	// Pushdown parameters for query optimization
+	std::vector<std::string> projection_columns;
+	std::string modified_query;
+
+	// Column information for query building
+	std::vector<std::string> column_names;
+
+	// Current filters from DuckDB (not owned by this class)
+	TableFilterSet *current_filters = nullptr;
+
+	// Pushdown settings
+	bool filter_pushdown_enabled = true;
+
 	SnowflakeArrowStreamFactory(shared_ptr<snowflake::SnowflakeClient> conn, const std::string &query_str)
 	    : connection(std::move(conn)), query(query_str) {
 		std::memset(&statement, 0, sizeof(statement));
@@ -36,6 +55,15 @@ struct SnowflakeArrowStreamFactory {
 			AdbcStatementRelease(&statement, &error);
 		}
 	}
+
+	// Set column names for query building
+	void SetColumnNames(const std::vector<std::string> &names);
+
+	// Set filter pushdown enabled flag
+	void SetFilterPushdownEnabled(bool enabled);
+
+	// Update pushdown parameters and regenerate the modified query
+	void UpdatePushdownParameters(const std::vector<std::string> &projection, TableFilterSet *filter_set);
 };
 
 // Function to produce an ArrowArrayStreamWrapper from the factory

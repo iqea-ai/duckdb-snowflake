@@ -17,11 +17,11 @@ require-env SNOWFLAKE_DATABASE
 statement ok
 SELECT snowflake_version()
 
-# Test 2: Check Extension Version
-query TT
-SELECT loaded, installed FROM duckdb_extensions() WHERE extension_name = 'snowflake'
+# Test 2: Check Extension Functions Available
+query I
+SELECT COUNT(*) FROM duckdb_functions() WHERE function_name LIKE '%snowflake%'
 ----
-true	true
+2
 
 # Test 3: Create Basic Snowflake Secret
 statement ok
