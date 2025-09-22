@@ -1,126 +1,443 @@
-# DuckDB Snowflake Extension with Predicate Pushdown
+# DuckDB Snowflake Extension
 
-This repository contains a DuckDB extension for connecting to Snowflake with advanced predicate pushdown capabilities.
-
-## Features
-
-- **Predicate Pushdown**: Automatically pushes WHERE clauses and SELECT projections to Snowflake
-- **Comprehensive Testing**: 20+ SQL logic tests that verify pushdown functionality
-- **Production Ready**: Robust error handling and comprehensive test coverage
-- **GitHub Actions CI/CD**: Automated testing on every push and pull request
+A powerful DuckDB extension that enables seamless querying of Snowflake databases using Arrow ADBC drivers. This extension provides efficient, columnar data transfer between DuckDB and Snowflake, making it ideal for analytics, ETL pipelines, and cross-database operations.
 
 ## Quick Start
 
+### Installation
+
+```sql
+-- Install and load the extension
+INSTALL snowflake FROM community;
+LOAD snowflake;
+```
+
+### Basic Usage
+
+```sql
+-- 1. Create a Snowflake profile
+CREATE SECRET my_snowflake_secret (
+    TYPE snowflake,
+    ACCOUNT 'your_account.snowflakecomputing.com',
+    USER 'your_username',
+    PASSWORD 'your_password',
+    DATABASE 'your_database',
+    WAREHOUSE 'your_warehouse'
+);
+
+-- 2.1 Query Snowflake data using pass through query
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customers WHERE state = ''CA''',
+    'my_snowflake_secret'
+);
+
+-- 2.2 Query Snowflake data using local duckdb SQL syntax
+ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_secret, READ_ONLY);
+
+SELECT * FROM snow_db.schema.customers WHERE state = 'CA';
+```
+
+## Documentation
+
+### For End Users
+
+If you want to **install and use** the extension, continue reading this README for:
+
+- Installation instructions
+- Configuration setup
+- Function reference
+- Usage examples
+- Troubleshooting guide
+
+## Overview
+
+The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capabilities and Snowflake's cloud data warehouse, allowing you to query Snowflake data directly from DuckDB without complex data movement processes.
+
+### Key Features
+
+- **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
+- **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
+- **Secure Authentication**: Password-based authentication with secure credential storage
+- **Secret Management**: Secure credential storage using DuckDB's secrets system
+- **Storage Extension**: Attach Snowflake databases as read-only storage
+
+## Installation
+
 ### Prerequisites
 
-- DuckDB (built from source)
-- Snowflake account with sample data access
-- CMake and Ninja build tools
+The DuckDB Snowflake extension requires the `libadbc_driver_snowflake.so` library to function properly. This library is **not included** in the extension package and must be obtained separately.
 
-### Building the Extension
+### Method 1: From DuckDB Community Extensions (Recommended)
+
+```sql
+-- Install and load the extension
+INSTALL snowflake FROM community;
+LOAD snowflake;
+```
+
+**Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
+
+### Method 2: Manual Installation
 
 ```bash
-# Build DuckDB
-cd duckdb
-make debug
+# Download the pre-built extension
+wget https://github.com/your-org/duckdb-snowflake/releases/latest/download/snowflake.duckdb_extension
 
-# Build the Snowflake extension
-cd build/debug
-ninja
+# Load in DuckDB
+LOAD 'path/to/snowflake.duckdb_extension';
 ```
 
-### Running Tests
+**Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
 
+## ADBC Driver Setup
+
+The Snowflake extension requires the Apache Arrow ADBC Snowflake driver to communicate with Snowflake servers. Download the appropriate driver for your platform:
+
+### Supported Platforms
+
+- **Linux x86_64** (`linux_amd64`)
+- **Linux ARM64** (`linux_arm64`) 
+- **Linux x86_64 (musl)** (`linux_amd64_musl`)
+- **macOS x86_64** (`osx_amd64`)
+- **macOS ARM64** (`osx_arm64`)
+- **Windows x86_64** (`windows_amd64`)
+- **Windows x86_64 (MinGW)** (`windows_amd64_mingw`)
+
+### Download Instructions
+
+The ADBC Snowflake driver is distributed as Python wheel files. You need to download the appropriate wheel and extract the shared library from it.
+
+**Automated Download (Recommended):**
+If you have the source code, you can use the provided script:
 ```bash
-# Set environment variables
-export SNOWFLAKE_ACCOUNT='your_account'
-export SNOWFLAKE_USERNAME='your_username'
-export SNOWFLAKE_PASSWORD='your_password'
-export SNOWFLAKE_DATABASE='SNOWFLAKE_SAMPLE_DATA'
-
-# Run comprehensive pushdown tests
-./test/unittest "/path/to/test/sql/snowflake_pushdown_proof.test"
-
-# Run all Snowflake tests
-./test/unittest "[sql]" --list-tests | grep snowflake
+# From the extension source directory
+make download-adbc
 ```
 
-## Test Suite
+**Manual Download:**
+If you prefer to download manually, follow the platform-specific instructions below:
 
-The repository includes comprehensive SQL logic tests:
+**For macOS (ARM64):**
+```bash
+# Download the Python wheel
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_11_0_arm64.whl
 
-- **`snowflake_pushdown_proof.test`**: 20 tests verifying pushdown functionality
-- **`snowflake_basic_connectivity.test`**: Basic connectivity and setup tests
-- **`snowflake_error_handling.test`**: Error handling and edge cases
-
-### Test Coverage
-
-- ✅ Basic equality filters (`WHERE C_CUSTKEY = 1`)
-- ✅ IN clause filters (`WHERE C_CUSTKEY IN (1,2,3)`)
-- ✅ Range filters (`WHERE C_CUSTKEY > 1000 AND C_CUSTKEY < 2000`)
-- ✅ BETWEEN filters (`WHERE C_CUSTKEY BETWEEN 1000 AND 2000`)
-- ✅ String filters (`WHERE C_NAME = 'Customer#000000001'`)
-- ✅ LIKE filters (`WHERE C_NAME LIKE 'Customer#00000000%'`)
-- ✅ IS NULL/IS NOT NULL filters
-- ✅ Projection pushdown (SELECT specific columns)
-- ✅ Complex multi-column projections
-- ✅ Query history verification (when permissions allow)
-
-## GitHub Actions Integration
-
-The repository is configured with GitHub Actions to automatically run tests on:
-
-- Every push to `main` or `develop` branches
-- Every pull request
-- Manual workflow dispatch
-
-### Required Secrets
-
-Add these secrets to your GitHub repository settings:
-
-- `SNOWFLAKE_ACCOUNT`: Your Snowflake account identifier
-- `SNOWFLAKE_USERNAME`: Your Snowflake username
-- `SNOWFLAKE_PASSWORD`: Your Snowflake password
-- `SNOWFLAKE_DATABASE`: Database name (e.g., `SNOWFLAKE_SAMPLE_DATA`)
-
-### Viewing Test Results
-
-1. Go to your repository on GitHub
-2. Click on the "Actions" tab
-3. Select the latest workflow run
-4. View test results and logs
-
-## Pushdown Verification
-
-The tests verify pushdown is working by:
-
-1. **Debug Output Analysis**: Checking that queries are modified with WHERE clauses and SELECT projections
-2. **Query History Verification**: Attempting to query Snowflake's query history (requires permissions)
-3. **Result Verification**: Ensuring correct results are returned with pushdown enabled
-
-Example debug output showing pushdown:
-```
-[DEBUG] Query pushdown applied - original: 'SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER', 
-modified: 'SELECT "C_CUSTKEY" FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER WHERE "C_CUSTKEY" = 1'
+# Extract the shared library
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
 ```
 
-## Function Reference
+**For macOS (x86_64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_10_15_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
 
-- `snowflake_scan(query, secret_name)`: Main table function for querying Snowflake
-- `snowflake_version()`: Returns extension version information
+**For Linux (x86_64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
 
-## Environment Variables
+**For Linux (ARM64):**
+```bash
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
 
-- `SNOWFLAKE_DISABLE_PUSHDOWN`: Set to 'true' to disable pushdown (for testing)
+**For Linux (x86_64 musl):**
+```bash
+# Note: Use the standard Linux x86_64 wheel for musl systems
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+```
 
-## Contributing
+**For Windows (x86_64):**
+```cmd
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+powershell Expand-Archive -Path adbc_driver_snowflake.whl -DestinationPath temp_extract
+move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rmdir /s temp_extract
+del adbc_driver_snowflake.whl
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+**For Windows (x86_64 MinGW):**
+```cmd
+# Note: Use the standard Windows x86_64 wheel for MinGW systems
+curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+powershell Expand-Archive -Path adbc_driver_snowflake.whl -DestinationPath temp_extract
+move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+rmdir /s temp_extract
+del adbc_driver_snowflake.whl
+```
 
-## License
+### Driver Placement
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+The extension searches for the driver in these locations (in order):
+1. Extension directory: `./libadbc_driver_snowflake.so`
+2. Extension subdirectory: `./adbc_drivers/libadbc_driver_snowflake.so`
+3. Build directory: `./adbc_drivers/libadbc_driver_snowflake.so`
+4. System paths: `/usr/local/lib/` or `/usr/lib/`
+
+**Recommended approach:**
+```bash
+# Create the adbc_drivers directory next to your DuckDB binary
+mkdir -p adbc_drivers
+mv libadbc_driver_snowflake.so adbc_drivers/
+```
+
+### Verification
+
+Test that the driver is found:
+```sql
+LOAD snowflake;
+SELECT snowflake_version();
+-- Should return: "Snowflake Extension v0.1.0"
+```
+
+### Troubleshooting
+
+**If you get "ADBC driver not supported" error:**
+- Verify the driver file is in the correct location
+- Check file permissions (should be executable)
+- Ensure you downloaded the correct architecture for your platform
+
+**If you get "Driver not found" debug messages:**
+- The extension will search multiple locations automatically
+- Check the debug output to see which paths it's checking
+- Place the driver in one of the searched locations
+
+## Configuration
+
+### Setting Up Snowflake Credentials
+
+#### Using Secrets (Recommended)
+
+Create a named profile to securely store your Snowflake credentials:
+
+**Creating a Secret:**
+
+```sql
+-- Secret with optional parameters
+CREATE SECRET my_snowflake_secret (
+    TYPE snowflake,
+    ACCOUNT 'adbniqz-ct69933',
+    USER 'myusername',
+    PASSWORD 'mypassword',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse',
+    SCHEMA 'myschema'  -- Optional: default schema
+);
+```
+
+**Listing Secrets:**
+
+```sql
+-- View all secrets
+SELECT * FROM duckdb_secrets();
+
+-- View only Snowflake secrets
+SELECT * FROM duckdb_secrets() WHERE type = 'snowflake';
+```
+
+**Updating a Secret:**
+
+```sql
+-- Drop and recreate to update
+DROP SECRET my_snowflake_secret;
+
+CREATE SECRET ...
+```
+
+**Deleting a Secret:**
+
+```sql
+-- Remove a secret
+DROP SECRET my_snowflake_secret;
+```
+
+## Functions Reference
+
+### Scalar Functions
+
+#### `snowflake_version()`
+
+Returns the extension version information.
+
+```sql
+SELECT snowflake_version();
+-- Returns: "Snowflake Extension v0.1.0"
+```
+
+### Table Functions
+
+#### `snowflake_scan(query, profile)`
+
+Executes SQL queries against Snowflake databases.
+
+```sql
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customers WHERE state = ''CA''',
+    'my_snowflake_secret'
+);
+```
+
+### Storage Extension
+
+#### `ATTACH` with Snowflake Storage Extension
+
+Attaches a Snowflake database as a read-only storage extension.
+
+```sql
+-- Using secret
+ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_secret, READ_ONLY);
+
+-- Using connection string
+ATTACH 'account=myaccount;user=myuser;password=mypass;database=mydb;warehouse=mywh'
+AS snow_db (TYPE snowflake, READ_ONLY);
+```
+
+## Usage Examples
+
+### Basic Queries
+
+```sql
+-- Test connection
+SELECT * FROM snowflake_scan('SELECT 1', 'my_snowflake_secret');
+
+-- Query with attached database
+ATTACH '' AS snow (TYPE snowflake, SECRET my_snowflake_secret, READ_ONLY);
+SELECT * FROM snow.public.customers LIMIT 10;
+```
+
+### Complex Analytics
+
+```sql
+-- Use Snowflake's computational power for complex analytics
+SELECT * FROM snowflake_scan(
+    '
+    WITH monthly_sales AS (
+        SELECT
+            DATE_TRUNC(''month'', order_date) as month,
+            SUM(amount) as total_sales
+        FROM orders
+        GROUP BY 1
+    )
+    SELECT
+        month,
+        total_sales,
+        LAG(total_sales) OVER (ORDER BY month) as prev_month_sales
+    FROM monthly_sales
+    ',
+    'my_snowflake_secret'
+);
+```
+
+### Cross-Database Analytics
+
+```sql
+-- Combine Snowflake data with local DuckDB tables
+SELECT
+    sf.product_id,
+    sf.sales_amount,
+    local.discount_rate,
+    sf.sales_amount * (1 - local.discount_rate) as discounted_amount
+FROM snowflake_scan(
+    'SELECT product_id, SUM(amount) as sales_amount FROM sales GROUP BY product_id',
+    'my_snowflake_secret'
+) sf
+JOIN local_discounts local ON sf.product_id = local.product_id;
+```
+
+### Data Export Workflows
+
+```sql
+-- Export large dataset efficiently
+CREATE TABLE local_fact_sales AS
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM fact_sales WHERE year >= 2020',
+    'my_snowflake_secret'
+);
+
+-- Create Parquet files from Snowflake data
+COPY (
+    SELECT * FROM snowflake_scan(
+        'SELECT * FROM large_table',
+        'my_snowflake_secret'
+    )
+) TO 'output.parquet' (FORMAT PARQUET);
+```
+
+
+## Troubleshooting
+
+### Common Errors
+
+**Connection Errors:**
+
+```
+Failed to initialize connection: [Snowflake] 390100 (08004): Incorrect username or password was specified.
+```
+
+**Solution**: Verify your credentials and account information.
+
+**Query Errors:**
+
+```
+Failed to get schema: [Snowflake] 090105 (22000): Cannot perform SELECT. This session does not have a current database.
+```
+
+**Solution**: Specify a database in the connection string or use fully qualified table names.
+
+### Debugging Tips
+
+```sql
+-- Test connection with a simple query
+SELECT * FROM snowflake_scan('SELECT 1', 'my_snowflake_secret');
+
+-- Check profile configuration
+SELECT * FROM duckdb_secrets() WHERE type = 'snowflake';
+
+-- Verify warehouse status
+SELECT * FROM snowflake_scan(
+    'SHOW WAREHOUSES',
+    'my_snowflake_secret'
+);
+```
+
+## Limitations
+
+- **Read-only access**: All Snowflake operations are read-only
+- **Pushdown for Storage Attach**: Pushdown is not implemented for storage ATTACH, SELECT queries get all the data to duckdb before applying filters like WHERE clause
+- **Large result sets**: Should be filtered at source for optimal performance, consider using snowflake_scan
+- ****COUNT(\*)** like column alias operations are not supported until projection pushdown is implemented
+
+## Security Best Practices
+
+1. **Use Strong Passwords**: Create complex passwords for your Snowflake accounts
+2. **Principle of Least Privilege**: Use Snowflake roles with minimal required permissions
+3. **Regular Rotation**: Update passwords and credentials regularly
+4. **Environment Separation**: Use different secrets for dev/test/prod environments
+5. **Secure Storage**: Secrets are stored encrypted in DuckDB's internal storage
+
+## Support
+
+For issues or questions:
+
+- Check the [GitHub repository](https://github.com/your-repo/duckdb-snowflake)
+- Review Snowflake ADBC driver documentation
+- Ensure you have the latest version of the extension
+
+### For Developers
+
+If you want to build the extension from source or contribute to development, see [BUILD.md](BUILD.md) for detailed build instructions and development guidelines.# Trigger new workflow run
+# Test build with DuckDB 1.4.0

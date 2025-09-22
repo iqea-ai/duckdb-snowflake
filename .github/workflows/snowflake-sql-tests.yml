@@ -1,10 +1,10 @@
-name: Snowflake Extension Tests
+name: Snowflake SQL Logic Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -30,30 +30,16 @@ jobs:
         cd duckdb
         make debug
         
-    - name: Build Snowflake Extension
-      run: |
-        cd build/debug
-        ninja
-        
-    - name: Run Snowflake Basic Connectivity Tests
+    - name: Run Snowflake SQL Logic Tests
       env:
         SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
         SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
         SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
       run: |
-        cd build/debug
-        ./test/unittest "/home/runner/work/test1/test1/test/sql/snowflake_basic_connectivity.test"
-        
-    - name: Run Snowflake Pushdown Proof Tests
-      env:
-        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-      run: |
-        cd build/debug
-        ./test/unittest "/home/runner/work/test1/test1/test/sql/snowflake_pushdown_proof.test"
+        cd duckdb
+        ./build/debug/test/unittest "/home/runner/work/duckdb-snowflake/duckdb-snowflake/test/sql/snowflake_pushdown_proof.test"
+        ./build/debug/test/unittest "/home/runner/work/duckdb-snowflake/duckdb-snowflake/test/sql/snowflake_basic_connectivity.test"
         
     - name: Run All Snowflake Tests
       env:
@@ -62,8 +48,7 @@ jobs:
         SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
       run: |
-        cd build/debug
-        ./test/unittest "[sql]" --list-tests | grep snowflake | while read test; do
-          echo "Running test: $test"
-          ./test/unittest "$test" || echo "Test failed: $test"
-        done
+        cd duckdb
+        ./build/debug/test/unittest "[sql]" --list-tests | grep snowflake
+        echo "Running all Snowflake tests..."
+        ./build/debug/test/unittest "[sql]" | grep -E "(snowflake|PASSED|FAILED)"
