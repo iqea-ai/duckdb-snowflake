@@ -60,7 +60,7 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	bool filter_pushdown_enabled = true;
 
 	// Check for environment variable to disable pushdown for testing
-	const char* pushdown_env = std::getenv("SNOWFLAKE_DISABLE_PUSHDOWN");
+	const char *pushdown_env = std::getenv("SNOWFLAKE_DISABLE_PUSHDOWN");
 	if (pushdown_env && std::string(pushdown_env) == "true") {
 		filter_pushdown_enabled = false;
 		DPRINT("Pushdown disabled via SNOWFLAKE_DISABLE_PUSHDOWN environment variable\n");
