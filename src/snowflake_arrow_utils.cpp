@@ -75,8 +75,7 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	// This ensures the modified query is used for execution
 	AdbcError query_error;
 	std::memset(&query_error, 0, sizeof(query_error));
-	const std::string& query_to_use = factory->modified_query.empty() ? factory->query : factory->modified_query;
-
+	const std::string &query_to_use = factory->modified_query.empty() ? factory->query : factory->modified_query;
 
 	AdbcStatusCode query_status = AdbcStatementSetSqlQuery(&factory->statement, query_to_use.c_str(), &query_error);
 	if (query_status != ADBC_STATUS_OK) {
@@ -143,7 +142,8 @@ void SnowflakeArrowStreamFactory::SetFilterPushdownEnabled(bool enabled) {
 	filter_pushdown_enabled = enabled;
 }
 
-void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const std::vector<std::string> &projection, TableFilterSet *filter_set) {
+void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const std::vector<std::string> &projection,
+                                                           TableFilterSet *filter_set) {
 	// Thread-safe parameter update
 	projection_columns = projection;
 	current_filters = filter_set;
@@ -165,7 +165,8 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const std::vector<std
 		}
 
 		// Build SELECT clause from projection
-		std::string select_clause = snowflake::SnowflakeQueryBuilder::BuildSelectClause(projection_columns, column_names);
+		std::string select_clause =
+		    snowflake::SnowflakeQueryBuilder::BuildSelectClause(projection_columns, column_names);
 
 		// Modify the original query with pushdown optimizations
 		modified_query = snowflake::SnowflakeQueryBuilder::ModifyQuery(query, select_clause, where_clause);
