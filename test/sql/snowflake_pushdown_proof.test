@@ -1,7 +1,8 @@
 # name: test/sql/snowflake_pushdown_proof.test
 # description: Predicate pushdown proof with performance benchmarks using 159GB Snowflake sample data
+# group: [sql]
+
 # This test suite provides definitive proof that pushdown is working with real performance measurements on massive datasets
-# group: [snowflake]
 
 require snowflake
 
@@ -113,10 +114,10 @@ SELECT COUNT(*) FROM snowflake_scan(
 ----
 1
 
-# Test 8: Large Dataset Performance Test - LINEITEM Table (600M rows, 16.6GB)
-# This test demonstrates pushdown performance on the TPCH_SF100.LINEITEM table
+# Test 8: Large Dataset Performance Test - LINEITEM Table (6M rows, 165MB)
+# This test demonstrates pushdown performance on the TPCH_SF1.LINEITEM table
 query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF100.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
 ----
 6
 
@@ -136,7 +137,7 @@ SELECT COUNT(*) FROM snowflake_scan(
 # Test 9: Large Dataset Range Filter - Performance Test
 # Testing range filters on the TPCH_SF100.LINEITEM table
 query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF100.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY BETWEEN 1 AND 100
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY BETWEEN 1 AND 100
 ----
 110
 
@@ -156,7 +157,7 @@ SELECT COUNT(*) FROM snowflake_scan(
 # Test 10: Large Dataset IN Filter - Performance Test
 # Testing IN clauses on the TPCH_SF100.LINEITEM table
 query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF100.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
 ----
 17
 
@@ -176,7 +177,7 @@ SELECT COUNT(*) FROM snowflake_scan(
 # Test 11: Large Dataset Projection Pushdown - Performance Test
 # Testing column selection on large dataset
 query III
-SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF100.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
+SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
 ----
 1	2131495	4631496
 1	67309080	7309081
