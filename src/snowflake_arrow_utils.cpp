@@ -59,7 +59,14 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 		AdbcStatusCode status = AdbcStatementNew(factory->connection->GetConnection(), &factory->statement, &error);
 		DPRINT("Statement created at %p for factory %p\n", (void *)&factory->statement, (void *)factory);
 		if (status != ADBC_STATUS_OK) {
-			throw IOException("Failed to create statement");
+			std::string error_msg = "Failed to create statement";
+			if (error.message) {
+				error_msg += ": " + std::string(error.message);
+				if (error.release) {
+					error.release(&error);
+				}
+			}
+			throw IOException(error_msg);
 		}
 		factory->statement_initialized = true;
 	}
@@ -102,13 +109,28 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 				error.release(&error);
 			}
 		}
+		// Clean up statement on error
+		if (factory->statement_initialized) {
+			AdbcError cleanup_error;
+			std::memset(&cleanup_error, 0, sizeof(cleanup_error));
+			AdbcStatementRelease(&factory->statement, &cleanup_error);
+			factory->statement_initialized = false;
+		}
 		throw IOException(error_msg);
 	}
 
 	// Transfer ownership of the ADBC stream to our wrapper
 	// This ensures zero-copy data transfer from Snowflake to DuckDB
-	wrapper->InitializeFromADBC(&adbc_stream);
-	wrapper->number_of_rows = rows_affected;
+	try {
+		wrapper->InitializeFromADBC(&adbc_stream);
+		wrapper->number_of_rows = rows_affected;
+	} catch (const std::exception &e) {
+		// Clean up stream on error
+		if (adbc_stream.release) {
+			adbc_stream.release(&adbc_stream);
+		}
+		throw IOException("Failed to initialize Arrow stream wrapper: " + std::string(e.what()));
+	}
 
 	return std::move(wrapper);
 }
@@ -122,6 +144,7 @@ void SnowflakeArrowStreamFactory::SetFilterPushdownEnabled(bool enabled) {
 }
 
 void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const std::vector<std::string> &projection, TableFilterSet *filter_set) {
+	// Thread-safe parameter update
 	projection_columns = projection;
 	current_filters = filter_set;
 

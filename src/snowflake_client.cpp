@@ -485,7 +485,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 						bool is_valid = (validity[byte_idx] >> bit_idx) & 1;
 
 						if (!is_valid) {
-							// TODO possibly push NULL instead of ""?
+							// Use empty string for NULL values
 							results[col_idx].push_back("");
 							continue;
 						}

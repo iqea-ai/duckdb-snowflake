@@ -2,7 +2,6 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "snowflake_extension.hpp"
-// #include "snowflake_attach.hpp"
 #include "storage/snowflake_storage.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
@@ -39,7 +38,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(std::move(snowflake_version_function));
 
 #ifdef ADBC_AVAILABLE
-	// Register snowflake_scan table function with pushdown (only available when ADBC is available)
+	// Register snowflake_scan table function (only available when ADBC is available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
 	loader.RegisterFunction(std::move(snowflake_scan_function));
 
@@ -61,7 +60,7 @@ void SnowflakeExtension::Load(ExtensionLoader &loader) {
 	LoadInternal(loader);
 }
 std::string SnowflakeExtension::Name() {
-	return "snowflake_pushdown";
+	return "snowflake";
 }
 
 std::string SnowflakeExtension::Version() const {
@@ -86,9 +85,13 @@ DUCKDB_EXTENSION_API const char *snowflake_version() {
 }
 
 // C++ extension entry point for loadable extensions
+#ifdef DUCKDB_BUILD_LOADABLE_EXTENSION
+extern "C" {
 DUCKDB_CPP_EXTENSION_ENTRY(snowflake, loader) {
 	duckdb::LoadInternal(loader);
 }
+}
+#endif
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN

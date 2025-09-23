@@ -18,7 +18,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	string query = "SELECT * FROM " + config.database + "." + schema.name + "." + name;
 	DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
 
-	// TODO consider maintaining a thread-safe pool of connections in client, so we can use the client within
+	// Note: Consider maintaining a thread-safe pool of connections in client for better performance
 	// SnowflakeTableEntry instead of creating a new client
 	auto &client_manager = SnowflakeClientManager::GetInstance();
 	auto connection = client_manager.GetConnection(config);
@@ -27,7 +27,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
-	// TODO remove below line after implementing projection pushdown
+	// Note: Projection pushdown implementation pending
 	snowflake_bind_data->projection_pushdown_enabled = false;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");

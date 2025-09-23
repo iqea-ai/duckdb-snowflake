@@ -57,6 +57,12 @@ private:
 	// Escape SQL identifiers and literals
 	static std::string EscapeSqlIdentifier(const std::string &identifier);
 	static std::string EscapeSqlLiteral(const std::string &literal);
+
+	// Helper functions for enhanced query modification
+	static bool IsValidSimpleSelectQuery(const std::string &query);
+	static bool HasWhereClause(const std::string &query);
+	static bool HasSelectStar(const std::string &query);
+	static std::string ReplaceSelectStar(const std::string &query, const std::string &select_clause);
 };
 
 } // namespace snowflake
