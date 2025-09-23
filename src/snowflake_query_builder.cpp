@@ -15,7 +15,7 @@ namespace duckdb {
 namespace snowflake {
 
 std::string SnowflakeQueryBuilder::BuildWhereClause(const std::vector<TableFilter> &filters,
-                                                   const std::vector<std::string> &column_names) {
+                                                    const std::vector<std::string> &column_names) {
 	if (filters.empty()) {
 		return "";
 	}
@@ -63,7 +63,7 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(const std::vector<TableFilte
 }
 
 std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
-                                                   const std::vector<std::string> &column_names) {
+                                                    const std::vector<std::string> &column_names) {
 	if (!filter_set || filter_set->filters.empty()) {
 		return "";
 	}
@@ -76,7 +76,8 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
 		const auto &filter = filter_entry.second;
 
 		if (column_index >= column_names.size()) {
-			DPRINT("Warning: Filter column index %llu exceeds column names size %zu\n", column_index, column_names.size());
+			DPRINT("Warning: Filter column index %llu exceeds column names size %zu\n", column_index,
+			       column_names.size());
 			continue;
 		}
 
@@ -113,7 +114,7 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
 }
 
 std::string SnowflakeQueryBuilder::BuildSelectClause(const std::vector<std::string> &projection_columns,
-                                                    const std::vector<std::string> &all_columns) {
+                                                     const std::vector<std::string> &all_columns) {
 	if (projection_columns.empty()) {
 		return "";
 	}
@@ -136,9 +137,8 @@ std::string SnowflakeQueryBuilder::BuildSelectClause(const std::vector<std::stri
 	return result;
 }
 
-std::string SnowflakeQueryBuilder::ModifyQuery(const std::string &original_query,
-                                              const std::string &select_clause,
-                                              const std::string &where_clause) {
+std::string SnowflakeQueryBuilder::ModifyQuery(const std::string &original_query, const std::string &select_clause,
+                                               const std::string &where_clause) {
 	// Enhanced query modification with proper validation and error handling
 	// This implementation is more robust than simple string manipulation
 
@@ -179,8 +179,8 @@ std::string SnowflakeQueryBuilder::ModifyQuery(const std::string &original_query
 	}
 
 	if (query_modified) {
-		DPRINT("Query pushdown applied - original: '%s', modified: '%s'\n",
-		       original_query.c_str(), modified_query.c_str());
+		DPRINT("Query pushdown applied - original: '%s', modified: '%s'\n", original_query.c_str(),
+		       modified_query.c_str());
 	} else {
 		DPRINT("No query modifications applied\n");
 	}
@@ -188,66 +188,69 @@ std::string SnowflakeQueryBuilder::ModifyQuery(const std::string &original_query
 	return modified_query;
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformFilter(const TableFilter &filter,
+                                                              const std::string &column_name) {
 	switch (filter.filter_type) {
-		case TableFilterType::CONSTANT_COMPARISON:
-			return TransformConstantFilter(filter, column_name);
-		case TableFilterType::IS_NULL:
-			return EscapeSqlIdentifier(column_name) + " IS NULL";
-		case TableFilterType::IS_NOT_NULL:
-			return EscapeSqlIdentifier(column_name) + " IS NOT NULL";
-		case TableFilterType::CONJUNCTION_AND:
-			return TransformConjunctionFilter(filter, column_name);
-		case TableFilterType::CONJUNCTION_OR:
-			return TransformConjunctionFilter(filter, column_name);
-		case TableFilterType::IN_FILTER:
-			return TransformInFilter(filter, column_name);
-		case TableFilterType::OPTIONAL_FILTER:
-			// OPTIONAL_FILTER wraps another filter - unwrap it and process the inner filter
-			try {
-				const auto &optional_filter = filter.Cast<OptionalFilter>();
-				return TransformFilter(*optional_filter.child_filter, column_name);
-			} catch (const std::exception &e) {
-				DPRINT("Failed to unwrap OPTIONAL_FILTER: %s\n", e.what());
-				return "";
-			}
-		default:
-			DPRINT("Unsupported filter type: %d\n", static_cast<int>(filter.filter_type));
+	case TableFilterType::CONSTANT_COMPARISON:
+		return TransformConstantFilter(filter, column_name);
+	case TableFilterType::IS_NULL:
+		return EscapeSqlIdentifier(column_name) + " IS NULL";
+	case TableFilterType::IS_NOT_NULL:
+		return EscapeSqlIdentifier(column_name) + " IS NOT NULL";
+	case TableFilterType::CONJUNCTION_AND:
+		return TransformConjunctionFilter(filter, column_name);
+	case TableFilterType::CONJUNCTION_OR:
+		return TransformConjunctionFilter(filter, column_name);
+	case TableFilterType::IN_FILTER:
+		return TransformInFilter(filter, column_name);
+	case TableFilterType::OPTIONAL_FILTER:
+		// OPTIONAL_FILTER wraps another filter - unwrap it and process the inner filter
+		try {
+			const auto &optional_filter = filter.Cast<OptionalFilter>();
+			return TransformFilter(*optional_filter.child_filter, column_name);
+		} catch (const std::exception &e) {
+			DPRINT("Failed to unwrap OPTIONAL_FILTER: %s\n", e.what());
 			return "";
+		}
+	default:
+		DPRINT("Unsupported filter type: %d\n", static_cast<int>(filter.filter_type));
+		return "";
 	}
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformConstantFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformConstantFilter(const TableFilter &filter,
+                                                                      const std::string &column_name) {
 	const auto &constant_filter = filter.Cast<ConstantFilter>();
 	const std::string &escaped_column = EscapeSqlIdentifier(column_name);
 	const std::string &value_literal = ValueToSqlLiteral(constant_filter.constant);
 
 	switch (constant_filter.comparison_type) {
-		case ExpressionType::COMPARE_EQUAL:
-			return escaped_column + " = " + value_literal;
-		case ExpressionType::COMPARE_NOTEQUAL:
-			return escaped_column + " != " + value_literal;
-		case ExpressionType::COMPARE_LESSTHAN:
-			return escaped_column + " < " + value_literal;
-		case ExpressionType::COMPARE_GREATERTHAN:
-			return escaped_column + " > " + value_literal;
-		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
-			return escaped_column + " <= " + value_literal;
-		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-			return escaped_column + " >= " + value_literal;
-		case ExpressionType::COMPARE_DISTINCT_FROM:
-			// Snowflake uses IS DISTINCT FROM
-			return escaped_column + " IS DISTINCT FROM " + value_literal;
-		case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
-			// Snowflake uses IS NOT DISTINCT FROM
-			return escaped_column + " IS NOT DISTINCT FROM " + value_literal;
-		default:
-			DPRINT("Unsupported comparison type: %d\n", static_cast<int>(constant_filter.comparison_type));
-			return "";
+	case ExpressionType::COMPARE_EQUAL:
+		return escaped_column + " = " + value_literal;
+	case ExpressionType::COMPARE_NOTEQUAL:
+		return escaped_column + " != " + value_literal;
+	case ExpressionType::COMPARE_LESSTHAN:
+		return escaped_column + " < " + value_literal;
+	case ExpressionType::COMPARE_GREATERTHAN:
+		return escaped_column + " > " + value_literal;
+	case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+		return escaped_column + " <= " + value_literal;
+	case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		return escaped_column + " >= " + value_literal;
+	case ExpressionType::COMPARE_DISTINCT_FROM:
+		// Snowflake uses IS DISTINCT FROM
+		return escaped_column + " IS DISTINCT FROM " + value_literal;
+	case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
+		// Snowflake uses IS NOT DISTINCT FROM
+		return escaped_column + " IS NOT DISTINCT FROM " + value_literal;
+	default:
+		DPRINT("Unsupported comparison type: %d\n", static_cast<int>(constant_filter.comparison_type));
+		return "";
 	}
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformConjunctionFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformConjunctionFilter(const TableFilter &filter,
+                                                                         const std::string &column_name) {
 	if (filter.filter_type == TableFilterType::CONJUNCTION_AND) {
 		const auto &and_filter = filter.Cast<ConjunctionAndFilter>();
 		std::vector<std::string> conditions;
@@ -312,7 +315,8 @@ std::string snowflake::SnowflakeQueryBuilder::TransformConjunctionFilter(const T
 	return "";
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformInFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformInFilter(const TableFilter &filter,
+                                                                const std::string &column_name) {
 	const auto &in_filter = filter.Cast<InFilter>();
 	const std::string &escaped_column = EscapeSqlIdentifier(column_name);
 
@@ -333,7 +337,8 @@ std::string snowflake::SnowflakeQueryBuilder::TransformInFilter(const TableFilte
 	return result;
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformRangeFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformRangeFilter(const TableFilter &filter,
+                                                                   const std::string &column_name) {
 	// Range filters are typically implemented as conjunction of two constant filters
 	// This is handled by TransformConjunctionFilter, so this method is not needed
 	// but kept for future extensibility
@@ -341,7 +346,8 @@ std::string snowflake::SnowflakeQueryBuilder::TransformRangeFilter(const TableFi
 	return "";
 }
 
-std::string snowflake::SnowflakeQueryBuilder::TransformLikeFilter(const TableFilter &filter, const std::string &column_name) {
+std::string snowflake::SnowflakeQueryBuilder::TransformLikeFilter(const TableFilter &filter,
+                                                                  const std::string &column_name) {
 	// LIKE filters are typically implemented as constant filters with LIKE comparison
 	// This would need to be handled in TransformConstantFilter for COMPARE_LIKE
 	// but DuckDB doesn't have a direct LIKE filter type in TableFilter
@@ -355,74 +361,74 @@ std::string snowflake::SnowflakeQueryBuilder::ValueToSqlLiteral(const Value &val
 	}
 
 	switch (value.type().id()) {
-		case LogicalTypeId::BOOLEAN:
-			return value.GetValue<bool>() ? "TRUE" : "FALSE";
-		case LogicalTypeId::TINYINT:
-		case LogicalTypeId::SMALLINT:
-		case LogicalTypeId::INTEGER:
-		case LogicalTypeId::BIGINT:
-			return std::to_string(value.GetValue<int64_t>());
-		case LogicalTypeId::UTINYINT:
-		case LogicalTypeId::USMALLINT:
-		case LogicalTypeId::UINTEGER:
-		case LogicalTypeId::UBIGINT:
-			return std::to_string(value.GetValue<uint64_t>());
-		case LogicalTypeId::FLOAT:
-		case LogicalTypeId::DOUBLE:
-			return std::to_string(value.GetValue<double>());
-		case LogicalTypeId::VARCHAR:
-		case LogicalTypeId::CHAR:
-			return EscapeSqlLiteral(value.GetValue<std::string>());
-		case LogicalTypeId::DATE: {
-			// Format as 'YYYY-MM-DD' using proper date formatting
-			date_t date_val = value.GetValue<date_t>();
-			int32_t year, month, day;
-			Date::Convert(date_val, year, month, day);
-			return StringUtil::Format("'%04d-%02d-%02d'", year, month, day);
-		}
-		case LogicalTypeId::TIMESTAMP: {
-			// Format as 'YYYY-MM-DD HH:MM:SS' using proper timestamp formatting
-			timestamp_t ts_val = value.GetValue<timestamp_t>();
-			date_t date_val = Timestamp::GetDate(ts_val);
-			dtime_t time_val = Timestamp::GetTime(ts_val);
+	case LogicalTypeId::BOOLEAN:
+		return value.GetValue<bool>() ? "TRUE" : "FALSE";
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::INTEGER:
+	case LogicalTypeId::BIGINT:
+		return std::to_string(value.GetValue<int64_t>());
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
+	case LogicalTypeId::UINTEGER:
+	case LogicalTypeId::UBIGINT:
+		return std::to_string(value.GetValue<uint64_t>());
+	case LogicalTypeId::FLOAT:
+	case LogicalTypeId::DOUBLE:
+		return std::to_string(value.GetValue<double>());
+	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::CHAR:
+		return EscapeSqlLiteral(value.GetValue<std::string>());
+	case LogicalTypeId::DATE: {
+		// Format as 'YYYY-MM-DD' using proper date formatting
+		date_t date_val = value.GetValue<date_t>();
+		int32_t year, month, day;
+		Date::Convert(date_val, year, month, day);
+		return StringUtil::Format("'%04d-%02d-%02d'", year, month, day);
+	}
+	case LogicalTypeId::TIMESTAMP: {
+		// Format as 'YYYY-MM-DD HH:MM:SS' using proper timestamp formatting
+		timestamp_t ts_val = value.GetValue<timestamp_t>();
+		date_t date_val = Timestamp::GetDate(ts_val);
+		dtime_t time_val = Timestamp::GetTime(ts_val);
 
-			int32_t year, month, day;
-			Date::Convert(date_val, year, month, day);
+		int32_t year, month, day;
+		Date::Convert(date_val, year, month, day);
 
-			int32_t hour, min, sec, microsec;
-			Time::Convert(time_val, hour, min, sec, microsec);
+		int32_t hour, min, sec, microsec;
+		Time::Convert(time_val, hour, min, sec, microsec);
 
-			return StringUtil::Format("'%04d-%02d-%02d %02d:%02d:%02d'", year, month, day, hour, min, sec);
-		}
-		case LogicalTypeId::TIMESTAMP_TZ: {
-			// For timestamp with timezone, use the timestamp value directly
-			// Snowflake will handle the timezone conversion
-			timestamp_t ts_val = value.GetValue<timestamp_t>();
-			date_t date_val = Timestamp::GetDate(ts_val);
-			dtime_t time_val = Timestamp::GetTime(ts_val);
+		return StringUtil::Format("'%04d-%02d-%02d %02d:%02d:%02d'", year, month, day, hour, min, sec);
+	}
+	case LogicalTypeId::TIMESTAMP_TZ: {
+		// For timestamp with timezone, use the timestamp value directly
+		// Snowflake will handle the timezone conversion
+		timestamp_t ts_val = value.GetValue<timestamp_t>();
+		date_t date_val = Timestamp::GetDate(ts_val);
+		dtime_t time_val = Timestamp::GetTime(ts_val);
 
-			int32_t year, month, day;
-			Date::Convert(date_val, year, month, day);
+		int32_t year, month, day;
+		Date::Convert(date_val, year, month, day);
 
-			int32_t hour, min, sec, microsec;
-			Time::Convert(time_val, hour, min, sec, microsec);
+		int32_t hour, min, sec, microsec;
+		Time::Convert(time_val, hour, min, sec, microsec);
 
-			return StringUtil::Format("'%04d-%02d-%02d %02d:%02d:%02d'", year, month, day, hour, min, sec);
-		}
-		case LogicalTypeId::TIME: {
-			// Format as 'HH:MM:SS'
-			dtime_t time_val = value.GetValue<dtime_t>();
-			int32_t hour, min, sec, microsec;
-			Time::Convert(time_val, hour, min, sec, microsec);
-			return StringUtil::Format("'%02d:%02d:%02d'", hour, min, sec);
-		}
-		case LogicalTypeId::DECIMAL: {
-			// Handle decimal types - convert to string representation
-			return value.ToString();
-		}
-		default:
-			DPRINT("Unsupported value type for SQL literal: %s\n", value.type().ToString().c_str());
-			return "NULL";
+		return StringUtil::Format("'%04d-%02d-%02d %02d:%02d:%02d'", year, month, day, hour, min, sec);
+	}
+	case LogicalTypeId::TIME: {
+		// Format as 'HH:MM:SS'
+		dtime_t time_val = value.GetValue<dtime_t>();
+		int32_t hour, min, sec, microsec;
+		Time::Convert(time_val, hour, min, sec, microsec);
+		return StringUtil::Format("'%02d:%02d:%02d'", hour, min, sec);
+	}
+	case LogicalTypeId::DECIMAL: {
+		// Handle decimal types - convert to string representation
+		return value.ToString();
+	}
+	default:
+		DPRINT("Unsupported value type for SQL literal: %s\n", value.type().ToString().c_str());
+		return "NULL";
 	}
 }
 
@@ -440,19 +446,20 @@ std::string snowflake::SnowflakeQueryBuilder::EscapeSqlIdentifier(const std::str
 	// Check remaining characters - must be alphanumeric or underscore
 	for (size_t i = 1; i < identifier.length(); i++) {
 		if (!std::isalnum(identifier[i]) && identifier[i] != '_') {
-			throw std::invalid_argument("Invalid identifier: contains invalid character '" + std::string(1, identifier[i]) + "'");
+			throw std::invalid_argument("Invalid identifier: contains invalid character '" +
+			                            std::string(1, identifier[i]) + "'");
 		}
 	}
 
 	// Check for reserved keywords
 	static const std::set<std::string> reserved_keywords = {
-		"SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL",
-		"ORDER", "BY", "GROUP", "HAVING", "LIMIT", "OFFSET", "DISTINCT", "ALL", "ANY", "SOME",
-		"EXISTS", "CASE", "WHEN", "THEN", "ELSE", "END", "AS", "ON", "JOIN", "INNER", "LEFT",
-		"RIGHT", "FULL", "OUTER", "UNION", "INTERSECT", "EXCEPT", "INSERT", "UPDATE", "DELETE",
-		"CREATE", "DROP", "ALTER", "TABLE", "INDEX", "VIEW", "SCHEMA", "DATABASE", "USER",
-		"ROLE", "GRANT", "REVOKE", "COMMIT", "ROLLBACK", "TRANSACTION", "BEGIN", "END"
-	};
+	    "SELECT",    "FROM",        "WHERE",  "AND",      "OR",     "NOT",    "IN",    "BETWEEN", "LIKE",
+	    "IS",        "NULL",        "ORDER",  "BY",       "GROUP",  "HAVING", "LIMIT", "OFFSET",  "DISTINCT",
+	    "ALL",       "ANY",         "SOME",   "EXISTS",   "CASE",   "WHEN",   "THEN",  "ELSE",    "END",
+	    "AS",        "ON",          "JOIN",   "INNER",    "LEFT",   "RIGHT",  "FULL",  "OUTER",   "UNION",
+	    "INTERSECT", "EXCEPT",      "INSERT", "UPDATE",   "DELETE", "CREATE", "DROP",  "ALTER",   "TABLE",
+	    "INDEX",     "VIEW",        "SCHEMA", "DATABASE", "USER",   "ROLE",   "GRANT", "REVOKE",  "COMMIT",
+	    "ROLLBACK",  "TRANSACTION", "BEGIN",  "END"};
 
 	std::string upper_identifier = StringUtil::Upper(identifier);
 	if (reserved_keywords.find(upper_identifier) != reserved_keywords.end()) {
@@ -470,22 +477,22 @@ std::string snowflake::SnowflakeQueryBuilder::EscapeSqlLiteral(const std::string
 	std::string escaped = literal;
 
 	// Handle all dangerous characters
-	StringUtil::Replace(escaped, "\\", "\\\\");  // Backslash
-	StringUtil::Replace(escaped, "'", "''");     // Single quote
-	StringUtil::Replace(escaped, "\"", "\"\"");  // Double quote
-	StringUtil::Replace(escaped, "\0", "\\0");   // Null byte
-	StringUtil::Replace(escaped, "\n", "\\n");   // Newline
-	StringUtil::Replace(escaped, "\r", "\\r");   // Carriage return
-	StringUtil::Replace(escaped, "\t", "\\t");   // Tab
-	StringUtil::Replace(escaped, "\b", "\\b");   // Backspace
-	StringUtil::Replace(escaped, "\f", "\\f");   // Form feed
+	StringUtil::Replace(escaped, "\\", "\\\\"); // Backslash
+	StringUtil::Replace(escaped, "'", "''");    // Single quote
+	StringUtil::Replace(escaped, "\"", "\"\""); // Double quote
+	StringUtil::Replace(escaped, "\0", "\\0");  // Null byte
+	StringUtil::Replace(escaped, "\n", "\\n");  // Newline
+	StringUtil::Replace(escaped, "\r", "\\r");  // Carriage return
+	StringUtil::Replace(escaped, "\t", "\\t");  // Tab
+	StringUtil::Replace(escaped, "\b", "\\b");  // Backspace
+	StringUtil::Replace(escaped, "\f", "\\f");  // Form feed
 
 	// Handle Unicode characters that could be used for injection
 	for (size_t i = 0; i < escaped.length(); i++) {
 		unsigned char c = static_cast<unsigned char>(escaped[i]);
 		// Check for potentially dangerous Unicode characters
 		if (c == 0x27 || c == 0x22 || c == 0x5C) { // Single quote, double quote, backslash
-			// Already handled above
+			                                       // Already handled above
 		} else if (c < 32 || c > 126) {
 			// Non-printable characters - escape as hex
 			std::string hex_escape = "\\x" + StringUtil::Format("%02X", c);
@@ -516,10 +523,8 @@ bool snowflake::SnowflakeQueryBuilder::IsValidSimpleSelectQuery(const std::strin
 
 	// Check for unsupported constructs
 	std::vector<std::string> unsupported = {
-		"UNION", "INTERSECT", "EXCEPT", "WITH", "CTE", "WINDOW", "PARTITION",
-		"JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS",
-		"GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"
-	};
+	    "UNION", "INTERSECT", "EXCEPT", "WITH",  "CTE",      "WINDOW", "PARTITION", "JOIN",  "INNER", "LEFT",
+	    "RIGHT", "FULL",      "OUTER",  "CROSS", "GROUP BY", "HAVING", "ORDER BY",  "LIMIT", "OFFSET"};
 
 	for (const auto &construct : unsupported) {
 		if (upper_query.find(construct) != std::string::npos) {
@@ -567,7 +572,7 @@ bool snowflake::SnowflakeQueryBuilder::HasWhereClause(const std::string &query) 
 		char c = upper_query[i];
 
 		// Handle string literals
-		if ((c == '\'' || c == '"') && (i == 0 || upper_query[i-1] != '\\')) {
+		if ((c == '\'' || c == '"') && (i == 0 || upper_query[i - 1] != '\\')) {
 			if (!in_string) {
 				in_string = true;
 				string_char = c;
@@ -579,8 +584,8 @@ bool snowflake::SnowflakeQueryBuilder::HasWhereClause(const std::string &query) 
 		// Look for WHERE keyword outside of strings
 		if (!in_string && upper_query.substr(i, 5) == "WHERE") {
 			// Check if it's a whole word
-			if ((i == 0 || !std::isalnum(upper_query[i-1])) &&
-			    (i + 5 >= upper_query.length() || !std::isalnum(upper_query[i+5]))) {
+			if ((i == 0 || !std::isalnum(upper_query[i - 1])) &&
+			    (i + 5 >= upper_query.length() || !std::isalnum(upper_query[i + 5]))) {
 				return true;
 			}
 		}
@@ -611,7 +616,8 @@ bool snowflake::SnowflakeQueryBuilder::HasSelectStar(const std::string &query) {
 	return select_clause == "*";
 }
 
-std::string snowflake::SnowflakeQueryBuilder::ReplaceSelectStar(const std::string &query, const std::string &select_clause) {
+std::string snowflake::SnowflakeQueryBuilder::ReplaceSelectStar(const std::string &query,
+                                                                const std::string &select_clause) {
 	// Replace SELECT * with SELECT column_list
 	std::string upper_query = StringUtil::Upper(query);
 	size_t select_pos = upper_query.find("SELECT");
