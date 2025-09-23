@@ -1,3 +1,6 @@
+# name: test/sql/snowflake_error_handling.test
+# group: [sql]
+
 # Snowflake Error Handling Tests
 # These tests verify graceful fallback when pushdown fails
 
