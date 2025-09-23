@@ -468,7 +468,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 
 		for (idx_t col_idx = 0; col_idx < static_cast<idx_t>(arrow_array.n_children); col_idx++) {
 			ArrowArray *column = arrow_array.children[col_idx];
-			if (column && column->buffers && column->n_buffers >= 3) {
+			if (column && column->buffers && static_cast<size_t>(column->n_buffers) >= 3) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
 				const int32_t *offsets = static_cast<const int32_t *>(column->buffers[1]);
 				const char *data = static_cast<const char *>(column->buffers[2]);
@@ -478,10 +478,10 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 					validity = static_cast<const uint8_t *>(column->buffers[0]);
 				}
 
-				for (int64_t row_idx = 0; row_idx < column->length; row_idx++) {
+				for (int64_t row_idx = 0; row_idx < static_cast<int64_t>(column->length); row_idx++) {
 					if (validity && column->null_count > 0) {
-						size_t byte_idx = row_idx / 8;
-						size_t bit_idx = row_idx % 8;
+						size_t byte_idx = static_cast<size_t>(row_idx) / 8;
+						size_t bit_idx = static_cast<size_t>(row_idx) % 8;
 						bool is_valid = (validity[byte_idx] >> bit_idx) & 1;
 
 						if (!is_valid) {
@@ -566,10 +566,8 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	vector<LogicalType> actual_types;
 	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
 	                                             schema_wrapper.arrow_schema);
-
-	// Get the types and names from the populated ArrowTableSchema
-	actual_types = arrow_table.GetTypes();
 	actual_names = arrow_table.GetNames();
+	actual_types = arrow_table.GetTypes();
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +

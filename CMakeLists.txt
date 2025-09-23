@@ -105,9 +105,12 @@ target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE
 set(ADBC_DRIVER_FILE "libadbc_driver_snowflake.so")
 set(ADBC_DRIVER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/adbc_drivers/${ADBC_DRIVER_FILE}")
 
-# Check if ADBC driver exists
+# Check if ADBC driver exists and we're not building for Wasm
 if(NOT EXISTS "${ADBC_DRIVER_PATH}")
     message(WARNING "ADBC Snowflake driver not found at ${ADBC_DRIVER_PATH}. Run 'make download-adbc' to download it.")
+elseif(EMSCRIPTEN)
+    # Skip copying ADBC driver for Wasm builds - it's not supported
+    message(STATUS "Skipping ADBC driver copy for Wasm build - driver not supported on this platform")
 else()
     message(STATUS "Found ADBC Snowflake driver at ${ADBC_DRIVER_PATH}")
     
@@ -155,8 +158,8 @@ install(
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
 
-# Also install the ADBC driver if it exists
-if(EXISTS "${ADBC_DRIVER_PATH}")
+# Also install the ADBC driver if it exists and we're not building for Wasm
+if(EXISTS "${ADBC_DRIVER_PATH}" AND NOT EMSCRIPTEN)
     install(FILES "${ADBC_DRIVER_PATH}"
         DESTINATION "${INSTALL_LIB_DIR}"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
