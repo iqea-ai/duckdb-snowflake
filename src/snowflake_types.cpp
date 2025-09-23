@@ -95,8 +95,8 @@ LogicalType SnowflakeTypeToLogicalType(const std::string &snowflake_type_str) {
 	// NUMBER type (Snowflake's variable precision numeric)
 	if (base_type == "NUMBER") {
 		if (paren_pos == std::string::npos) {
-			// Note: Consider creating user setting to specify behavior. DOUBLE is relatively safe but loses precision for
-			// large decimals, and could possibly be losing out on performance.
+			// Note: Consider creating user setting to specify behavior. DOUBLE is relatively safe but loses precision
+			// for large decimals, and could possibly be losing out on performance.
 			return LogicalType::DOUBLE;
 		}
 
