@@ -28,7 +28,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
 	// Note: Projection pushdown implementation pending
-	snowflake_bind_data->projection_pushdown_enabled = false;
+	snowflake_bind_data->projection_pushdown_enabled = true;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
 	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
@@ -44,6 +44,12 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	return_types = snowflake_bind_data->arrow_table.GetTypes();
 	snowflake_bind_data->all_types = return_types;
 
+	// Set column names in the factory for query building (same as snowflake_scan)
+	snowflake_bind_data->factory->SetColumnNames(names);
+
+	// Enable filter pushdown for ATTACH (same as snowflake_scan)
+	snowflake_bind_data->factory->SetFilterPushdownEnabled(true);
+	
 	// Populate columns if not already loaded (first time accessing this table)
 	if (!columns_loaded) {
 		for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
