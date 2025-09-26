@@ -331,11 +331,7 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 	const string schema_query = "SELECT schema_name FROM " + config.database + ".INFORMATION_SCHEMA.SCHEMATA";
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
-
-	for (auto &schema : schemas) {
-		schema = StringUtil::Lower(schema);
-	}
-
+	
 	return schemas;
 }
 
@@ -348,10 +344,6 @@ vector<string> SnowflakeClient::ListTables(ClientContext &context, const string 
 
 	auto result = ExecuteAndGetStrings(context, table_name_query, {"table_name"});
 	auto table_names = result[0];
-
-	for (auto &table_name : table_names) {
-		table_name = StringUtil::Lower(table_name);
-	}
 
 	DPRINT("ListTables returning %zu tables\n", table_names.size());
 	for (const auto &table_name : table_names) {
