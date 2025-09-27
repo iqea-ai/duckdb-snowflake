@@ -134,18 +134,20 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	std::string extension_dir = GetExtensionDirectory();
 	search_paths.push_back(extension_dir + "/" + SNOWFLAKE_ADBC_LIB);
 
-	// 2. Try adbc_drivers subdirectory relative to extension
-	search_paths.push_back(extension_dir + "/adbc_drivers/" + SNOWFLAKE_ADBC_LIB);
+	// 2. Check environment variable (for custom locations)
+	const char *env_path = std::getenv("SNOWFLAKE_ADBC_DRIVER_PATH");
+	if (env_path) {
+		search_paths.push_back(env_path);
+	}
 
-	// 3. Try the build directory structure
-	search_paths.push_back(extension_dir + "/../../../adbc_drivers/" + SNOWFLAKE_ADBC_LIB);
-
-	// 4. Try system paths
+	// 3. Try system paths
+#ifdef _WIN32
+	search_paths.push_back("C:\\Windows\\System32\\" + SNOWFLAKE_ADBC_LIB);
+	search_paths.push_back("C:\\Program Files\\Snowflake\\" + SNOWFLAKE_ADBC_LIB);
+#else
 	search_paths.push_back(std::string("/usr/local/lib/") + SNOWFLAKE_ADBC_LIB);
 	search_paths.push_back(std::string("/usr/lib/") + SNOWFLAKE_ADBC_LIB);
-
-	// 5. Try just the filename - let the system search for it
-	search_paths.emplace_back(SNOWFLAKE_ADBC_LIB);
+#endif
 
 	// Find the first existing driver
 	std::string driver_path;
@@ -201,6 +203,10 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.private_key", config.private_key.c_str(), &error);
 			CheckError(status, "Failed to set private key", &error);
 		}
+		break;
+	case SnowflakeAuthType::EXT_BROWSER:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
+		CheckError(status, "Failed to set browser auth type", &error);
 		break;
 	}
 
@@ -435,7 +441,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 	schema_wrapper.arrow_schema = schema;
 
 	if (!expected_col_names.empty()) {
-		if (static_cast<size_t>(schema.n_children) != expected_col_names.size()) {
+		if (schema.n_children != static_cast<int64_t>(expected_col_names.size())) {
 			throw IOException("Expected " + to_string(expected_col_names.size()) + " columns but got " +
 			                  to_string(schema.n_children));
 		}
@@ -449,7 +455,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 		}
 	}
 
-	vector<vector<string>> results(static_cast<size_t>(schema.n_children));
+	vector<vector<string>> results(schema.n_children);
 
 	while (true) {
 		ArrowArray arrow_array;
@@ -466,22 +472,22 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 		ArrowArrayWrapper array_wrapper;
 		array_wrapper.arrow_array = arrow_array;
 
-		for (idx_t col_idx = 0; col_idx < static_cast<idx_t>(arrow_array.n_children); col_idx++) {
+		for (idx_t col_idx = 0; col_idx < arrow_array.n_children; col_idx++) {
 			ArrowArray *column = arrow_array.children[col_idx];
-			if (column && column->buffers && static_cast<size_t>(column->n_buffers) >= 3) {
+			if (column && column->buffers && column->n_buffers >= 3) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
-				const int32_t *offsets = static_cast<const int32_t *>(column->buffers[1]);
-				const char *data = static_cast<const char *>(column->buffers[2]);
+				const int32_t *offsets = (const int32_t *)column->buffers[1];
+				const char *data = (const char *)column->buffers[2];
 				const uint8_t *validity = nullptr;
 
 				if (column->buffers[0]) {
-					validity = static_cast<const uint8_t *>(column->buffers[0]);
+					validity = (const uint8_t *)column->buffers[0];
 				}
 
-				for (int64_t row_idx = 0; row_idx < static_cast<int64_t>(column->length); row_idx++) {
+				for (int64_t row_idx = 0; row_idx < column->length; row_idx++) {
 					if (validity && column->null_count > 0) {
-						size_t byte_idx = static_cast<size_t>(row_idx) / 8;
-						size_t bit_idx = static_cast<size_t>(row_idx) % 8;
+						size_t byte_idx = row_idx / 8;
+						size_t bit_idx = row_idx % 8;
 						bool is_valid = (validity[byte_idx] >> bit_idx) & 1;
 
 						if (!is_valid) {
@@ -540,7 +546,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	DPRINT("Executing SQL query...\n");
 	status = AdbcStatementExecuteQuery(&statement, &stream, &rows_affected, &error);
 	CheckError(status, "Failed to execute AdbcStatement with SQL query: " + query, &error);
-	DPRINT("SQL query executed successfully, rows_affected: %lld\n", rows_affected);
+	DPRINT("SQL query executed successfully, rows_affected: %ld\n", rows_affected);
 
 	DPRINT("Getting Arrow schema...\n");
 	ArrowSchema schema = {};
@@ -562,12 +568,12 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 
 	// Use the new DuckDB API to populate the arrow table schema
 	ArrowTableSchema arrow_table;
-	vector<string> actual_names;
-	vector<LogicalType> actual_types;
 	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
 	                                             schema_wrapper.arrow_schema);
-	actual_names = arrow_table.GetNames();
-	actual_types = arrow_table.GetTypes();
+
+	// Get the column names and types from the arrow table
+	vector<string> &actual_names = arrow_table.GetNames();
+	vector<LogicalType> &actual_types = arrow_table.GetTypes();
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +
@@ -603,14 +609,14 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 			DPRINT("Arrow array is all nulls!\n");
 		}
 
-		for (int64_t i = 0; i < static_cast<int64_t>(arrow_array.n_children); i++) {
+		for (int64_t i = 0; i < arrow_array.n_children; i++) {
 			if (arrow_array.children[i]) {
-				DPRINT("Child %lld: length=%lld, null_count=%lld\n", i, arrow_array.children[i]->length,
+				DPRINT("Child %ld: length=%ld, null_count=%ld\n", i, arrow_array.children[i]->length,
 				       arrow_array.children[i]->null_count);
 			}
 		}
 
-		DPRINT("Got Arrow batch %d with %lld rows\n", batch_count, arrow_array.length);
+		DPRINT("Got Arrow batch %d with %ld rows\n", batch_count, arrow_array.length);
 		batch_count++;
 
 		auto temp_chunk = make_uniq<DataChunk>();
@@ -619,7 +625,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 		auto array_wrapper = make_uniq<ArrowArrayWrapper>();
 		array_wrapper->arrow_array = arrow_array;
 
-		DPRINT("Arrow array details: n_buffers=%lld, n_children=%lld\n", arrow_array.n_buffers, arrow_array.n_children);
+		DPRINT("Arrow array details: n_buffers=%ld, n_children=%ld\n", arrow_array.n_buffers, arrow_array.n_children);
 
 		DPRINT("Creating ArrowScanLocalState...\n");
 		ArrowScanLocalState local_state(std::move(array_wrapper), context);
@@ -632,7 +638,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 
 		try {
 			ArrowTableFunction::ArrowToDuckDB(local_state, arrow_table.GetColumns(), *temp_chunk, batch_count - 1);
-			DPRINT("ArrowToDuckDB completed, chunk size: %llu\n", temp_chunk->size());
+			DPRINT("ArrowToDuckDB completed, chunk size: %zu\n", temp_chunk->size());
 		} catch (const std::exception &e) {
 			DPRINT("ArrowToDuckDB failed: %s\n", e.what());
 			throw;
@@ -654,7 +660,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	for (const auto &chunk : collected_chunks) {
 		result_chunk->Append(*chunk);
 	}
-	DPRINT("Final result chunk has %llu rows\n", result_chunk->size());
+	DPRINT("Final result chunk has %zu rows\n", result_chunk->size());
 
 	if (stream.release) {
 		stream.release(&stream);
