@@ -42,9 +42,17 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 				config.auth_type = SnowflakeAuthType::OAUTH;
 			} else if (value == "key_pair") {
 				config.auth_type = SnowflakeAuthType::KEY_PAIR;
+			} else if (value == "workload_identity") {
+				config.auth_type = SnowflakeAuthType::WORKLOAD_IDENTITY;
 			}
 		} else if (key == "token") {
 			config.oauth_token = value;
+		} else if (key == "oidc_token") {
+			config.oidc_token = value;
+		} else if (key == "token_file_path") {
+			config.token_file_path = value;
+		} else if (key == "workload_identity_provider") {
+			config.workload_identity_provider = value;
 		} else if (key == "private_key") {
 			config.private_key = value;
 		} else if (key == "query_timeout") {
@@ -82,6 +90,16 @@ std::string SnowflakeConfig::ToString() const {
 	} else if (auth_type == SnowflakeAuthType::KEY_PAIR) {
 		oss << "auth_type=key_pair;";
 		oss << "private_key=" << private_key << ";";
+	} else if (auth_type == SnowflakeAuthType::WORKLOAD_IDENTITY) {
+		oss << "auth_type=workload_identity;";
+		if (!token_file_path.empty()) {
+			oss << "token_file_path=" << token_file_path << ";";
+		} else if (!oidc_token.empty()) {
+			oss << "oidc_token=" << oidc_token << ";";
+		}
+		if (!workload_identity_provider.empty()) {
+			oss << "workload_identity_provider=" << workload_identity_provider << ";";
+		}
 	}
 	oss << "query_timeout=" << query_timeout << ";";
 	oss << "keep_alive=" << (keep_alive ? "true" : "false") << ";";

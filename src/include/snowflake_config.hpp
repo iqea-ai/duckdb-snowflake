@@ -6,7 +6,7 @@
 namespace duckdb {
 namespace snowflake {
 
-enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR };
+enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR, WORKLOAD_IDENTITY };
 
 struct SnowflakeConfig {
 	std::string account;
@@ -18,6 +18,9 @@ struct SnowflakeConfig {
 	std::string password;
 	std::string oauth_token;
 	std::string private_key;
+	std::string oidc_token;
+	std::string token_file_path;
+	std::string workload_identity_provider;
 	int32_t query_timeout = 300; // seconds
 	bool keep_alive = true;
 	bool use_high_precision = true; // When false, DECIMAL(p,0) converts to INT64
@@ -56,6 +59,9 @@ public:
 		HashCombine(seed, config.password);
 		HashCombine(seed, config.oauth_token);
 		HashCombine(seed, config.private_key);
+		HashCombine(seed, config.oidc_token);
+		HashCombine(seed, config.token_file_path);
+		HashCombine(seed, config.workload_identity_provider);
 
 		return seed;
 	}

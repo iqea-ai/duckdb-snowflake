@@ -202,6 +202,24 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 			CheckError(status, "Failed to set private key", &error);
 		}
 		break;
+	case SnowflakeAuthType::WORKLOAD_IDENTITY:
+		// Set authenticator to WORKLOAD_IDENTITY
+		status = AdbcDatabaseSetOption(&database, "authenticator", "WORKLOAD_IDENTITY", &error);
+		CheckError(status, "Failed to set authenticator to WORKLOAD_IDENTITY", &error);
+		
+		// Set workload identity provider to OIDC
+		status = AdbcDatabaseSetOption(&database, "workload_identity_provider", "OIDC", &error);
+		CheckError(status, "Failed to set workload identity provider to OIDC", &error);
+		
+		// Set token - prefer file path over direct token
+		if (!config.token_file_path.empty()) {
+			status = AdbcDatabaseSetOption(&database, "token_file_path", config.token_file_path.c_str(), &error);
+			CheckError(status, "Failed to set token file path", &error);
+		} else if (!config.oidc_token.empty()) {
+			status = AdbcDatabaseSetOption(&database, "token", config.oidc_token.c_str(), &error);
+			CheckError(status, "Failed to set OIDC token", &error);
+		}
+		break;
 	}
 
 	// Set optional parameters
@@ -561,13 +579,10 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	schema_wrapper.arrow_schema = schema;
 
 	// Use the new DuckDB API to populate the arrow table schema
-	ArrowTableSchema arrow_table;
+	ArrowTableType arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
-	                                             schema_wrapper.arrow_schema);
-	actual_names = arrow_table.GetNames();
-	actual_types = arrow_table.GetTypes();
+	ArrowTableFunction::PopulateArrowTableType(DBConfig::GetConfig(context), arrow_table, schema_wrapper, actual_names, actual_types);
 
 	if (actual_types.size() != expected_types.size()) {
 		throw IOException("Schema mismatch: expected " + to_string(expected_types.size()) + " columns but got " +

@@ -56,7 +56,7 @@ string SnowflakeSecret::GetSchema() const {
 
 //! Validate that all required fields are present
 void SnowflakeSecret::Validate() const {
-	vector<string> required_fields = {"user", "password", "account", "database"};
+	vector<string> required_fields = {"account", "database"};
 	vector<string> missing_fields;
 
 	for (const auto &field : required_fields) {
@@ -69,6 +69,30 @@ void SnowflakeSecret::Validate() const {
 	if (!missing_fields.empty()) {
 		throw InvalidInputException("Snowflake secret is missing required fields: %s",
 		                            StringUtil::Join(missing_fields, ", "));
+	}
+
+	// Validate authentication method - must have either password auth or OIDC auth
+	bool has_password_auth = false;
+	bool has_oidc_auth = false;
+
+	Value user_value, password_value, oidc_token_value, token_file_value;
+	if (TryGetValue("user", user_value) && !user_value.IsNull() &&
+	    TryGetValue("password", password_value) && !password_value.IsNull()) {
+		has_password_auth = true;
+	}
+	if (TryGetValue("oidc_token", oidc_token_value) && !oidc_token_value.IsNull()) {
+		has_oidc_auth = true;
+	}
+	if (TryGetValue("token_file_path", token_file_value) && !token_file_value.IsNull()) {
+		has_oidc_auth = true;
+	}
+
+	if (!has_password_auth && !has_oidc_auth) {
+		throw InvalidInputException("Snowflake secret requires either 'user' and 'password' for password authentication, or 'oidc_token'/'token_file_path' for OIDC authentication");
+	}
+
+	if (has_password_auth && has_oidc_auth) {
+		throw InvalidInputException("Snowflake secret cannot have both password authentication and OIDC authentication - choose one method");
 	}
 }
 
@@ -110,8 +134,8 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 	auto secret = make_uniq<SnowflakeSecret>(input.scope, input.provider, input.name);
 
 	// Extract Snowflake-specific parameters from the input options
-	vector<string> required_fields = {"user", "password", "account", "database"};
-	vector<string> optional_fields = {"warehouse", "schema"};
+	vector<string> required_fields = {"account", "database"};
+	vector<string> optional_fields = {"user", "password", "warehouse", "schema", "oidc_token", "token_file_path", "workload_identity_provider"};
 
 	// Process required fields
 	for (const auto &field : required_fields) {
@@ -165,6 +189,9 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["warehouse"] = LogicalType::VARCHAR;
 	create_function.named_parameters["database"] = LogicalType::VARCHAR;
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
+	create_function.named_parameters["oidc_token"] = LogicalType::VARCHAR;
+	create_function.named_parameters["token_file_path"] = LogicalType::VARCHAR;
+	create_function.named_parameters["workload_identity_provider"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);
