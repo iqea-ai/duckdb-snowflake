@@ -6,8 +6,11 @@ require snowflake
 
 # Require environment variables to be set
 require-env SNOWFLAKE_ACCOUNT
+
 require-env SNOWFLAKE_USERNAME
+
 require-env SNOWFLAKE_PASSWORD
+
 require-env SNOWFLAKE_DATABASE
 
 # Test 1: Extension Loading
