@@ -43,7 +43,6 @@ SELECT id FROM null_test WHERE value IS NOT NULL;
 query I rowsort
 SELECT id FROM null_test WHERE TRY_CAST(value AS INTEGER) = 123;
 ----
-# Should return empty result (no matches) without error
 
 # Test 5: Complex filter with potential errors
 query I rowsort
