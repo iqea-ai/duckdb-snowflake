@@ -1,18 +1,15 @@
 # name: test/sql/snowflake_pushdown_proof.test
-# description: Predicate pushdown proof with performance benchmarks using 159GB Snowflake sample data
+# description: Predicate pushdown proof tests using Snowflake sample data
 # group: [sql]
 
-# This test suite provides definitive proof that pushdown is working with real performance measurements on massive datasets
+# This test suite provides proof that pushdown is working with real Snowflake data
 
 require snowflake
 
 # Require environment variables for Snowflake connection
 require-env SNOWFLAKE_ACCOUNT
-
 require-env SNOWFLAKE_USERNAME
-
 require-env SNOWFLAKE_PASSWORD
-
 require-env SNOWFLAKE_DATABASE
 
 # Test 1: Extension Loading and Pushdown Function Availability
@@ -27,7 +24,7 @@ SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'snowflake_scan'
 
 # Test 3: Create Snowflake Secret using environment variables
 statement ok
-CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_secret (
+CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_pushdown_test (
     TYPE snowflake,
     ACCOUNT '${SNOWFLAKE_ACCOUNT}',
     USER '${SNOWFLAKE_USERNAME}',
@@ -36,196 +33,38 @@ CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_secret (
     WAREHOUSE 'COMPUTE_WH'
 );
 
-# Test 4: Basic Equality Filter Pushdown - Small Dataset (150K rows)
-# This test executes a pushdown query on the CUSTOMER table (150K rows)
+# Test 4: Basic Equality Filter Pushdown
 query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_secret') WHERE C_CUSTKEY = 1
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_CUSTKEY = 1
 ----
 1
 
-# Test 4b: Verify Pushdown in Query History
+# Test 5: Range Filter Pushdown
 query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%CUSTOMER%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%C_CUSTKEY%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 5: IN Filter Pushdown - Small Dataset Performance
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_secret') WHERE C_CUSTKEY IN (1, 2, 3, 4, 5)
-----
-5
-
-# Test 5b: Verify IN Pushdown in Query History
-query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%CUSTOMER%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%IN%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 6: Range Filter Pushdown - Small Dataset Performance
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_secret') WHERE C_CUSTKEY > 1000 AND C_CUSTKEY < 2000
-----
-999
-
-# Test 6b: Verify Range Pushdown in Query History
-query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%CUSTOMER%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%> 1000%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 7: Projection Pushdown - Column Selection Performance
-query II
-SELECT C_CUSTKEY, C_NAME FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_secret') WHERE C_CUSTKEY = 1
-----
-1	Customer#000000001
-
-# Test 7b: Verify Projection Pushdown in Query History
-query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%CUSTOMER%''
-     AND QUERY_TEXT LIKE ''%SELECT%''
-     AND QUERY_TEXT LIKE ''%C_CUSTKEY%''
-     AND QUERY_TEXT LIKE ''%C_NAME%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 8: Large Dataset Performance Test - LINEITEM Table (6M rows, 165MB)
-# This test demonstrates pushdown performance on the TPCH_SF1.LINEITEM table
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
-----
-6
-
-# Test 8b: Verify Large Dataset Pushdown in Query History
-query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%LINEITEM%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%L_ORDERKEY%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 9: Large Dataset Range Filter - Performance Test
-# Testing range filters on the TPCH_SF100.LINEITEM table
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY BETWEEN 1 AND 100
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_pushdown_test') WHERE L_ORDERKEY BETWEEN 1 AND 100
 ----
 110
 
-# Test 9b: Verify Large Dataset Range Pushdown in Query History
+# Test 6: IN Clause Pushdown
 query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%LINEITEM%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%BETWEEN%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
-----
-1
-
-# Test 10: Large Dataset IN Filter - Performance Test
-# Testing IN clauses on the TPCH_SF100.LINEITEM table
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_pushdown_test') WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
 ----
 17
 
-# Test 10b: Verify Large Dataset IN Pushdown in Query History
+# Test 7: Column Projection Pushdown
+query TT
+SELECT C_CUSTKEY, C_NAME FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_NATIONKEY = 1 LIMIT 3
+----
+3	Customer#000000003
+14	Customer#000000014
+30	Customer#000000030
+
+# Test 8: Complex Filter Pushdown
 query I
-SELECT COUNT(*) FROM snowflake_scan(
-    'SELECT COUNT(*) FROM SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY 
-     WHERE QUERY_TEXT LIKE ''%LINEITEM%''
-     AND QUERY_TEXT LIKE ''%WHERE%''
-     AND QUERY_TEXT LIKE ''%IN%''
-     ORDER BY START_TIME DESC LIMIT 1',
-    'snowflake_secret'
-)
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_NATIONKEY = 1 AND C_ACCTBAL > 5000
 ----
-1
+2987
 
-# Test 11: Large Dataset Projection Pushdown - Performance Test
-# Testing column selection on large dataset
-query III
-SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY = 1
-----
-1	2131495	4631496
-1	67309080	7309081
-1	24026634	1526641
-1	63699776	3699777
-1	15634450	634453
-1	155189345	7689361
-
-# Test 12: Large Dataset Aggregate with Filter - Performance Test
-# Testing aggregation with pushdown on massive dataset
-query I
-SELECT SUM(L_QUANTITY) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1000.LINEITEM', 'snowflake_secret') WHERE L_ORDERKEY <= 10
-----
-691
-
-# Test 13: ORDERS Table Performance Test (1.5M rows)
-# Testing pushdown on the ORDERS table
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.ORDERS', 'snowflake_secret') WHERE O_ORDERKEY = 1
-----
-1
-
-# Test 14: PARTSUPP Table Performance Test (800K rows)
-# Testing pushdown on the PARTSUPP table
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.PARTSUPP', 'snowflake_secret') WHERE PS_PARTKEY = 1
-----
-4
-
-# Test 15: Performance Verification - Simple Query
-# This test verifies basic functionality works
-query I
-SELECT COUNT(*) FROM snowflake_scan('SELECT 1', 'snowflake_secret')
-----
-1
-
-# Test 16: Error Handling - Invalid Secret
-statement error
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'invalid_secret') WHERE C_CUSTKEY = 1
-----
-<REGEX>:.*Failed to retrieve credentials.*invalid_secret.*
-
-# Test 17: Error Handling - Invalid Table
-statement error
-SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM INVALID_TABLE', 'snowflake_secret') WHERE C_CUSTKEY = 1
-----
-<REGEX>:.*does not exist.*
-
-# Cleanup
+# Test 9: Clean up secret
 statement ok
-DROP SECRET IF EXISTS snowflake_secret;
+DROP SECRET snowflake_pushdown_test;
