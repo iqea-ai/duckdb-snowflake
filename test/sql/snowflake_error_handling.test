@@ -54,5 +54,6 @@ SELECT id FROM null_test WHERE (id > 0 AND value IS NOT NULL) OR (id = 1);
 # Clean up
 statement ok
 DROP TABLE empty_table;
+
 statement ok
 DROP TABLE null_test;
