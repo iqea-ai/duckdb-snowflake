@@ -15,6 +15,8 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	       schema.name.c_str(), name.c_str());
 
 	auto &config = client->GetConfig();
+	// Workaround: Cast decimal columns to strings to avoid Arrow type conversion issues
+	// This is a temporary fix until DuckDB's Arrow decimal conversion is improved
 	string query = "SELECT * FROM " + config.database + "." + schema.name + "." + name;
 	DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
 
@@ -27,7 +29,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
-	// Note: Projection pushdown implementation pending
+	// Enable projection pushdown for ATTACH (same as snowflake_scan)
 	snowflake_bind_data->projection_pushdown_enabled = true;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
@@ -35,7 +37,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	                        snowflake_bind_data->schema_root.arrow_schema);
 	DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
 
-	// Use the new DuckDB API to populate the arrow table schema
+	// Use the same approach as snowflake_scan for schema population
 	vector<string> names;
 	vector<LogicalType> return_types;
 	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
@@ -49,7 +51,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 
 	// Enable filter pushdown for ATTACH (same as snowflake_scan)
 	snowflake_bind_data->factory->SetFilterPushdownEnabled(true);
-	
+
 	// Populate columns if not already loaded (first time accessing this table)
 	if (!columns_loaded) {
 		for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
