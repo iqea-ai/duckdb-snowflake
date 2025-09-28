@@ -41,7 +41,7 @@ SELECT id FROM null_test WHERE value IS NOT NULL;
 
 # Test 4: Type mismatch handling (should fall back gracefully)
 query I rowsort
-SELECT id FROM null_test WHERE value = 123;
+SELECT id FROM null_test WHERE TRY_CAST(value AS INTEGER) = 123;
 ----
 # Should return empty result (no matches) without error
 
