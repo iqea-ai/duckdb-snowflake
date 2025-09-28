@@ -1,0 +1,70 @@
+# name: test/sql/snowflake_attach_functionality.test
+# description: ATTACH functionality tests for Snowflake extension with predicate pushdown
+# group: [sql]
+
+require snowflake
+
+# Require environment variables to be set
+require-env SNOWFLAKE_ACCOUNT
+require-env SNOWFLAKE_USERNAME
+require-env SNOWFLAKE_PASSWORD
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: Extension Loading
+statement ok
+SELECT snowflake_version()
+
+# Test 2: Create Snowflake Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_attach_test (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+# Test 3: ATTACH Database
+statement ok
+ATTACH '' AS snow_attach (TYPE snowflake, SECRET snowflake_attach_test, READ_ONLY);
+
+# Test 4: Basic ATTACH Query with Predicate Pushdown
+query I
+SELECT COUNT(*) FROM snow_attach.TPCH_SF1.CUSTOMER WHERE C_NATIONKEY = 1
+----
+5975
+
+# Test 5: ATTACH with Range Filter Pushdown
+query I
+SELECT COUNT(*) FROM snow_attach.TPCH_SF1.LINEITEM WHERE L_ORDERKEY BETWEEN 1 AND 100
+----
+110
+
+# Test 6: ATTACH with IN Clause Pushdown
+query I
+SELECT COUNT(*) FROM snow_attach.TPCH_SF1.LINEITEM WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
+----
+17
+
+# Test 7: ATTACH with Column Projection
+query TT
+SELECT C_CUSTKEY, C_NAME FROM snow_attach.TPCH_SF1.CUSTOMER WHERE C_NATIONKEY = 1 LIMIT 3
+----
+3	Customer#000000003
+14	Customer#000000014
+30	Customer#000000030
+
+# Test 8: ATTACH with Complex Filter
+query I
+SELECT COUNT(*) FROM snow_attach.TPCH_SF1.CUSTOMER WHERE C_NATIONKEY = 1 AND C_ACCTBAL > 5000
+----
+2987
+
+# Test 9: DETACH Database
+statement ok
+DETACH snow_attach;
+
+# Test 10: Clean up secret
+statement ok
+DROP SECRET snowflake_attach_test;
