@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Download pre-built ADBC Snowflake driver from official releases
-# Version 1.7.0 from ADBC release 19
+# Version 1.8.0 from ADBC release 20
 
-ADBC_VERSION="apache-arrow-adbc-19"
-DRIVER_VERSION="1.7.0"
+ADBC_VERSION="apache-arrow-adbc-20"
+DRIVER_VERSION="1.8.0"
 BASE_URL="https://github.com/apache/arrow-adbc/releases/download/${ADBC_VERSION}"
 
 # Detect platform
