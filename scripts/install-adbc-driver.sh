@@ -7,8 +7,8 @@
 set -e
 
 # Configuration
-ADBC_VERSION="apache-arrow-adbc-19"
-DRIVER_VERSION="1.7.0"
+ADBC_VERSION="apache-arrow-adbc-20"
+DRIVER_VERSION="1.8.0"
 BASE_URL="https://github.com/apache/arrow-adbc/releases/download/${ADBC_VERSION}"
 
 # Colors for output
