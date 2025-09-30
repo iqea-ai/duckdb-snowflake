@@ -21,94 +21,6 @@ jobs:
       ci_tools_version: main
       extension_name: snowflake
 
-  # Package complete extensions with ADBC drivers
-  # Note: This creates snowflake-extension-1.4-{platform} artifacts that include both
-  # the extension binary and the ADBC driver. The duckdb-main-build job also creates
-  # individual snowflake-main-extension-{platform} artifacts (extension only).
-  # Users should download the complete packages for immediate use.
-  package-extension-with-driver:
-    name: Build complete extension package
-    runs-on: ${{ matrix.runner }}
-    needs: duckdb-main-build
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver' || github.ref == 'refs/heads/feature/packaging-with-adbc-driver-stable')
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux platforms
-          - duckdb_arch: linux_amd64
-            runner: ubuntu-24.04
-            platform_name: linux_amd64
-          - duckdb_arch: linux_arm64
-            runner: ubuntu-24.04-arm
-            platform_name: linux_arm64
-          - duckdb_arch: linux_amd64_musl
-            runner: ubuntu-24.04
-            platform_name: linux_amd64_musl
-          # macOS platforms
-          - duckdb_arch: osx_amd64
-            runner: macos-14
-            platform_name: osx_amd64
-          - duckdb_arch: osx_arm64
-            runner: macos-14
-            platform_name: osx_arm64
-          # Windows platforms
-          - duckdb_arch: windows_amd64
-            runner: windows-latest
-            platform_name: windows_amd64
-          - duckdb_arch: windows_amd64_mingw
-            runner: windows-latest
-            platform_name: windows_amd64_mingw
-          # WebAssembly platforms (skip - they don't need native ADBC drivers)
-          # - duckdb_arch: wasm_mvp
-          #   runner: ubuntu-24.04
-          #   platform_name: wasm_mvp
-          # - duckdb_arch: wasm_eh
-          #   runner: ubuntu-24.04
-          #   platform_name: wasm_eh
-          # - duckdb_arch: wasm_threads
-          #   runner: ubuntu-24.04
-          #   platform_name: wasm_threads
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: snowflake-main-extension-${{ matrix.duckdb_arch }}
-          path: artifacts/
-
-      - name: Download ADBC driver
-        run: make download-adbc
-
-      - name: Package extension with driver (Linux/macOS)
-        if: runner.os == 'Linux' || runner.os == 'macOS'
-        run: |
-          mkdir -p dist
-          cp artifacts/snowflake.duckdb_extension dist/
-          cp adbc_drivers/libadbc_driver_snowflake.so dist/
-          zip -r snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip dist/
-          ls -la dist/
-
-      - name: Package extension with driver (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          mkdir dist
-          copy artifacts\snowflake.duckdb_extension dist\
-          copy adbc_drivers\libadbc_driver_snowflake.so dist\
-          powershell Compress-Archive -Path dist\* -DestinationPath snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip
-          dir dist
-
-      - name: Upload packaged extension
-        uses: actions/upload-artifact@v4
-        with:
-          name: snowflake-extension-1.4-${{ matrix.platform_name }}
-          path: snowflake-extension-with-driver-duckdb-1.4-${{ matrix.platform_name }}.zip
-          retention-days: 30
-
   code-quality-check:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
@@ -156,7 +68,8 @@ jobs:
           cd adbc_driver
           wget -q https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/${{ matrix.platform.wheel }}
           unzip -q ${{ matrix.platform.wheel }}
-          ls -lh adbc_driver_snowflake/
+          echo "Contents of adbc_driver_snowflake directory:"
+          ls -lah adbc_driver_snowflake/
           
       - name: Create complete package
         run: |
@@ -165,12 +78,22 @@ jobs:
           # Copy extension file
           find extension-artifact -name "*.duckdb_extension" -exec cp {} package/snowflake/ \;
           
-          # Copy ADBC driver
+          # Copy ADBC driver (all wheels contain .so or .dll, we copy whatever exists)
           if [[ "${{ matrix.platform.name }}" == windows* ]]; then
-            cp adbc_driver/adbc_driver_snowflake/adbc_driver_snowflake.dll package/snowflake/
+            # Windows wheels contain .dll file
+            if [ -f adbc_driver/adbc_driver_snowflake/adbc_driver_snowflake.dll ]; then
+              cp adbc_driver/adbc_driver_snowflake/adbc_driver_snowflake.dll package/snowflake/
+            else
+              # Fallback - some Windows builds might still use .so naming
+              cp adbc_driver/adbc_driver_snowflake/*.so package/snowflake/ 2>/dev/null || \
+              cp adbc_driver/adbc_driver_snowflake/*.dll package/snowflake/
+            fi
           else
             cp adbc_driver/adbc_driver_snowflake/libadbc_driver_snowflake.so package/snowflake/
           fi
+          
+          echo "Package contents before zipping:"
+          ls -lah package/snowflake/
           
           # Create zip archive
           cd package
