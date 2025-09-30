@@ -337,9 +337,10 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
 
-	for (auto &schema : schemas) {
-		schema = StringUtil::Lower(schema);
-	}
+	// Don't convert to lowercase - Snowflake schema names are case-sensitive
+	// for (auto &schema : schemas) {
+	//	schema = StringUtil::Lower(schema);
+	// }
 
 	return schemas;
 }
@@ -354,9 +355,10 @@ vector<string> SnowflakeClient::ListTables(ClientContext &context, const string 
 	auto result = ExecuteAndGetStrings(context, table_name_query, {"table_name"});
 	auto table_names = result[0];
 
-	for (auto &table_name : table_names) {
-		table_name = StringUtil::Lower(table_name);
-	}
+	// Don't convert to lowercase - Snowflake table names are case-sensitive
+	// for (auto &table_name : table_names) {
+	//	table_name = StringUtil::Lower(table_name);
+	// }
 
 	DPRINT("ListTables returning %zu tables\n", table_names.size());
 	for (const auto &table_name : table_names) {
@@ -490,7 +492,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 						bool is_valid = (validity[byte_idx] >> bit_idx) & 1;
 
 						if (!is_valid) {
-							// TODO possibly push NULL instead of ""?
+							// Use empty string for NULL values
 							results[col_idx].push_back("");
 							continue;
 						}

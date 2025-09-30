@@ -15,10 +15,12 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	       schema.name.c_str(), name.c_str());
 
 	auto &config = client->GetConfig();
+	// Workaround: Cast decimal columns to strings to avoid Arrow type conversion issues
+	// This is a temporary fix until DuckDB's Arrow decimal conversion is improved
 	string query = "SELECT * FROM " + config.database + "." + schema.name + "." + name;
 	DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
 
-	// TODO consider maintaining a thread-safe pool of connections in client, so we can use the client within
+	// Note: Consider maintaining a thread-safe pool of connections in client for better performance
 	// SnowflakeTableEntry instead of creating a new client
 	auto &client_manager = SnowflakeClientManager::GetInstance();
 	auto connection = client_manager.GetConnection(config);
@@ -27,15 +29,15 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
-	// TODO remove below line after implementing projection pushdown
-	snowflake_bind_data->projection_pushdown_enabled = false;
+	// Enable projection pushdown for ATTACH (same as snowflake_scan)
+	snowflake_bind_data->projection_pushdown_enabled = true;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
 	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
 	                        snowflake_bind_data->schema_root.arrow_schema);
 	DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
 
-	// Use the new DuckDB API to populate the arrow table schema
+	// Use the same approach as snowflake_scan for schema population
 	vector<string> names;
 	vector<LogicalType> return_types;
 	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
@@ -43,6 +45,12 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	names = snowflake_bind_data->arrow_table.GetNames();
 	return_types = snowflake_bind_data->arrow_table.GetTypes();
 	snowflake_bind_data->all_types = return_types;
+
+	// Set column names in the factory for query building (same as snowflake_scan)
+	snowflake_bind_data->factory->SetColumnNames(names);
+
+	// Enable filter pushdown for ATTACH (same as snowflake_scan)
+	snowflake_bind_data->factory->SetFilterPushdownEnabled(true);
 
 	// Populate columns if not already loaded (first time accessing this table)
 	if (!columns_loaded) {

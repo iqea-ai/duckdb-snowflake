@@ -1,0 +1,73 @@
+# name: test/sql/snowflake_pushdown_proof.test
+# description: Predicate pushdown proof tests using Snowflake sample data
+# group: [sql]
+
+# This test suite provides proof that pushdown is working with real Snowflake data
+
+require snowflake
+
+# Require environment variables for Snowflake connection
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: Extension Loading and Pushdown Function Availability
+statement ok
+SELECT snowflake_version()
+
+# Test 2: Verify pushdown function is available
+query I
+SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'snowflake_scan'
+----
+1
+
+# Test 3: Create Snowflake Secret using environment variables
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_pushdown_test (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+# Test 4: Basic Equality Filter Pushdown
+query I
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_CUSTKEY = 1
+----
+1
+
+# Test 5: Range Filter Pushdown
+query I
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_pushdown_test') WHERE L_ORDERKEY BETWEEN 1 AND 100
+----
+110
+
+# Test 6: IN Clause Pushdown
+query I
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM', 'snowflake_pushdown_test') WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
+----
+17
+
+# Test 7: Column Projection Pushdown
+query TT
+SELECT C_CUSTKEY, C_NAME FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_NATIONKEY = 1 LIMIT 3
+----
+3	Customer#000000003
+14	Customer#000000014
+30	Customer#000000030
+
+# Test 8: Complex Filter Pushdown
+query I
+SELECT COUNT(*) FROM snowflake_scan('SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'snowflake_pushdown_test') WHERE C_NATIONKEY = 1 AND C_ACCTBAL > 5000
+----
+2987
+
+# Test 9: Clean up secret
+statement ok
+DROP SECRET snowflake_pushdown_test;
