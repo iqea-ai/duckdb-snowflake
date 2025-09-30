@@ -155,16 +155,16 @@ LogicalType SnowflakeTypeToLogicalType(const std::string &snowflake_type_str) {
 LogicalType ConvertNumber(uint8_t precision, uint8_t scale) {
 	// For integer types (scale = 0), map to appropriate integer type based on precision
 	if (scale == 0) {
-		if (precision <= 2) {
+		if (precision <= 2U) {
 			return LogicalType::TINYINT; // -128 to 127
 		}
-		if (precision <= 4) {
+		if (precision <= 4U) {
 			return LogicalType::SMALLINT; // -32,768 to 32,767
 		}
-		if (precision <= 9) {
+		if (precision <= 9U) {
 			return LogicalType::INTEGER; // -2,147,483,648 to 2,147,483,647
 		}
-		if (precision <= 18) {
+		if (precision <= 18U) {
 			return LogicalType::BIGINT; // -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
 		}
 	}
