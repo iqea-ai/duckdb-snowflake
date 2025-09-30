@@ -142,8 +142,8 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 
 	// 3. Try system paths
 #ifdef _WIN32
-	search_paths.push_back("C:\\Windows\\System32\\" + SNOWFLAKE_ADBC_LIB);
-	search_paths.push_back("C:\\Program Files\\Snowflake\\" + SNOWFLAKE_ADBC_LIB);
+	search_paths.push_back(std::string("C:\\Windows\\System32\\") + SNOWFLAKE_ADBC_LIB);
+	search_paths.push_back(std::string("C:\\Program Files\\Snowflake\\") + SNOWFLAKE_ADBC_LIB);
 #else
 	search_paths.push_back(std::string("/usr/local/lib/") + SNOWFLAKE_ADBC_LIB);
 	search_paths.push_back(std::string("/usr/lib/") + SNOWFLAKE_ADBC_LIB);
