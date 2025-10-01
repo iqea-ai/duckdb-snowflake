@@ -134,17 +134,22 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	std::string extension_dir = GetExtensionDirectory();
 	search_paths.push_back(extension_dir + "/" + SNOWFLAKE_ADBC_LIB);
 
-	// 2. Try adbc_drivers subdirectory relative to extension
-	search_paths.push_back(extension_dir + "/adbc_drivers/" + SNOWFLAKE_ADBC_LIB);
+	// 2. Check environment variable (for custom locations)
+	const char *env_path = std::getenv("SNOWFLAKE_ADBC_DRIVER_PATH");
+	if (env_path) {
+		search_paths.push_back(env_path);
+	}
 
-	// 3. Try the build directory structure
-	search_paths.push_back(extension_dir + "/../../../adbc_drivers/" + SNOWFLAKE_ADBC_LIB);
-
-	// 4. Try system paths
+	// 3. Try system paths
+#ifdef _WIN32
+	search_paths.push_back(std::string("C:\\Windows\\System32\\") + SNOWFLAKE_ADBC_LIB);
+	search_paths.push_back(std::string("C:\\Program Files\\Snowflake\\") + SNOWFLAKE_ADBC_LIB);
+#else
 	search_paths.push_back(std::string("/usr/local/lib/") + SNOWFLAKE_ADBC_LIB);
 	search_paths.push_back(std::string("/usr/lib/") + SNOWFLAKE_ADBC_LIB);
+#endif
 
-	// 5. Try just the filename - let the system search for it
+	// 4. Try just the filename - let the system search for it
 	search_paths.emplace_back(SNOWFLAKE_ADBC_LIB);
 
 	// Find the first existing driver

@@ -91,105 +91,90 @@ LOAD 'path/to/snowflake.duckdb_extension';
 
 ## ADBC Driver Setup
 
-The Snowflake extension requires the Apache Arrow ADBC Snowflake driver to communicate with Snowflake servers. Download and install the appropriate driver for your platform:
+The Snowflake extension requires the Apache Arrow ADBC Snowflake driver to communicate with Snowflake servers.
 
-### Supported Platforms
+### Quick Install (Recommended)
 
-- **Linux x86_64** (`linux_amd64`)
-- **Linux ARM64** (`linux_arm64`) 
-- **Linux x86_64 (musl)** (`linux_amd64_musl`)
-- **macOS x86_64** (`osx_amd64`)
-- **macOS ARM64** (`osx_arm64`)
-- **Windows x86_64** (`windows_amd64`)
-- **Windows x86_64 (MinGW)** (`windows_amd64_mingw`)
+Use the automated installer script to download and install the correct ADBC driver for your platform:
 
-### Download and Installation Instructions
-
-The ADBC Snowflake driver is distributed as Python wheel files. Download the appropriate wheel, extract the shared library, and place it in the correct DuckDB extension directory:
-
-**For macOS (ARM64):**
 ```bash
-# Download the Python wheel
-curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_11_0_arm64.whl
+# Using curl
+curl -sSL https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/scripts/install-adbc-driver.sh | sh
 
-# Extract the shared library
-unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
-rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
-
-# Place in DuckDB extensions directory
-mkdir -p /Users/<username>/.duckdb/extensions/v1.4.0/osx_arm64
-mv libadbc_driver_snowflake.so /Users/<username>/.duckdb/extensions/v1.4.0/osx_arm64/
+# Or using wget
+wget -qO- https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/scripts/install-adbc-driver.sh | sh
 ```
 
-**For macOS (x86_64):**
+The installer will:
+- Detect your DuckDB version and platform automatically
+- Download the correct ADBC driver version
+- Install it to `~/.duckdb/extensions/<version>/<platform>/libadbc_driver_snowflake.so`
+- Verify the installation
+
+### Manual Installation
+
+If you prefer to install manually, download and install the appropriate driver for your platform:
+
+#### Supported Platforms
+
+| Platform | DuckDB Directory | Wheel File Suffix |
+|----------|------------------|-----------------|
+| **Linux x86_64** | `linux_amd64` | `manylinux1_x86_64.manylinux2014_x86_64...` |
+| **Linux ARM64** | `linux_arm64` | `manylinux2014_aarch64.manylinux_2_17_aarch64` |
+| **macOS x86_64** | `osx_amd64` | `macosx_10_15_x86_64` |
+| **macOS ARM64** | `osx_arm64` | `macosx_11_0_arm64` |
+| **Windows x86_64** | `windows_amd64` | `win_amd64` |
+
+#### Generic Installation Steps - non windows
+
+Replace `<PLATFORM>` with your platform directory from the table above:
+
 ```bash
-curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-macosx_10_15_x86_64.whl
-unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
-rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+# 1. Download the appropriate wheel for your platform from:
+#    https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/
+#    See the table above for the correct wheel file suffix
 
-# Place in DuckDB extensions directory
-mkdir -p /Users/<username>/.duckdb/extensions/v1.4.0/osx_amd64
-mv libadbc_driver_snowflake.so /Users/<username>/.duckdb/extensions/v1.4.0/osx_amd64/
+# 2. Extract the driver library
+unzip adbc_driver_snowflake-*.whl "adbc_driver_snowflake/*"
+
+# 3. Move to DuckDB extensions directory
+mkdir -p ~/.duckdb/extensions/v1.4.0/<PLATFORM>
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.0/<PLATFORM>/
+
+# 4. Clean up
+rm -rf adbc_driver_snowflake adbc_driver_snowflake-*.whl
 ```
 
-**For Linux (x86_64):**
+#### Example: Linux x86_64 Installation
+
 ```bash
-curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
-unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
+# Download
+curl -L -o adbc_driver_snowflake.whl \
+  https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+
+# Extract
+unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/*"
+
+# Install
+mkdir -p ~/.duckdb/extensions/v1.4.0/linux_amd64
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.0/linux_amd64/
+
+# Clean up
 rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
-
-# Place in DuckDB extensions directory
-mkdir -p /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64
-mv libadbc_driver_snowflake.so /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64/
 ```
 
-**For Linux (ARM64):**
-```bash
-curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
-unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
-rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+#### Available Wheel Files
 
-# Place in DuckDB extensions directory
-mkdir -p /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64
-mv libadbc_driver_snowflake.so /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64/
-```
+All wheels are available from [Apache Arrow ADBC Release 1.8.0](https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/):
 
-**For Linux (x86_64 musl):**
-```bash
-# Note: Use the standard Linux x86_64 wheel for musl systems
-curl -L -o adbc_driver_snowflake.whl https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
-unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/libadbc_driver_snowflake.so"
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so libadbc_driver_snowflake.so
-rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
+- **Linux x86_64**: `adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl`
+- **Linux ARM64**: `adbc_driver_snowflake-1.8.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl`
+- **macOS x86_64**: `adbc_driver_snowflake-1.8.0-py3-none-macosx_10_15_x86_64.whl`
+- **macOS ARM64**: `adbc_driver_snowflake-1.8.0-py3-none-macosx_11_0_arm64.whl`
 
-# Place in DuckDB extensions directory
-mkdir -p /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64
-mv libadbc_driver_snowflake.so /home/<username>/.duckdb/extensions/v1.4.0/linux_amd64/
-```
-
-**For Windows (x86_64):**
-```cmd
-# Download the wheel file (rename to zip for extraction)
-wget https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl -O adbc_driver_snowflake.zip
-
-# Extract the shared library
-powershell Expand-Archive -Path adbc_driver_snowflake.zip -DestinationPath temp_extract
-move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
-rmdir /s temp_extract
-del adbc_driver_snowflake.zip
-
-# Place in DuckDB extensions directory
-mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.4.0\windows_amd64
-move libadbc_driver_snowflake.so C:\Users\%USERNAME%\.duckdb\extensions\v1.4.0\windows_amd64\
-```
-
-**For Windows (x86_64 MinGW):**
-```cmd
-# Note: Use the standard Windows x86_64 wheel for MinGW systems
+#### Installation Steps - Windows
+``` shell
+# Download
 wget https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl -O adbc_driver_snowflake.zip
 powershell Expand-Archive -Path adbc_driver_snowflake.zip -DestinationPath temp_extract
 move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driver_snowflake.so
@@ -199,21 +184,6 @@ del adbc_driver_snowflake.zip
 # Place in DuckDB extensions directory
 mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.4.0\windows_amd64
 move libadbc_driver_snowflake.so C:\Users\%USERNAME%\.duckdb\extensions\v1.4.0\windows_amd64\
-```
-
-### Alternative Driver Placement
-
-The extension also searches for the driver in these locations (in order):
-1. Extension directory: `./libadbc_driver_snowflake.so`
-2. Extension subdirectory: `./adbc_drivers/libadbc_driver_snowflake.so`
-3. Build directory: `./adbc_drivers/libadbc_driver_snowflake.so`
-4. System paths: `/usr/local/lib/` or `/usr/lib/`
-
-**Alternative approach (next to DuckDB binary):**
-```bash
-# Create the adbc_drivers directory next to your DuckDB binary
-mkdir -p adbc_drivers
-mv libadbc_driver_snowflake.so adbc_drivers/
 ```
 
 ### Verification
