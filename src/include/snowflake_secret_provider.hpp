@@ -23,6 +23,14 @@ public:
 	string GetWarehouse() const;
 	string GetDatabase() const;
 	string GetSchema() const;
+	string GetRole() const;
+	
+	//! Get OIDC-specific fields
+	string GetOIDCToken() const;
+	string GetOIDCClientId() const;
+	string GetOIDCIssuerUrl() const;
+	string GetOIDCRedirectUri() const;
+	string GetOIDCScope() const;
 
 	//! Validate that all required fields are present
 	void Validate() const;

@@ -5,6 +5,7 @@ set(TARGET_NAME snowflake)
 project(${TARGET_NAME})
 include_directories(src/include)
 include_directories(third_party)
+include_directories(${CURL_INCLUDE_DIRS})
 
 # Configure build system for MinGW Windows builds
 # Force Ninja generator for MinGW builds to fix OpenSSL build issues
@@ -24,6 +25,9 @@ endif()
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
 # Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
 find_package(OpenSSL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CURL REQUIRED libcurl)
+find_package(jsoncpp REQUIRED)
 
 # ADBC will be loaded dynamically at runtime
 # Define the expected library name for each platform
@@ -49,6 +53,8 @@ set(EXTENSION_SOURCES
     src/snowflake_config.cpp
     src/snowflake_types.cpp
     src/snowflake_transaction.cpp
+    src/auth/pkce.cpp
+    src/auth/flow.cpp
     src/storage/snowflake_storage.cpp
     src/storage/snowflake_catalog.cpp
     src/storage/snowflake_catalog_set.cpp
@@ -70,10 +76,14 @@ set_property(TARGET ${LOADABLE_EXTENSION_NAME} PROPERTY "EXTENSION_VERSION_SCRIP
 target_link_libraries(${EXTENSION_NAME} 
     OpenSSL::SSL 
     OpenSSL::Crypto
+    ${CURL_LIBRARIES}
+    jsoncpp_lib
 )
 target_link_libraries(${LOADABLE_EXTENSION_NAME} 
     OpenSSL::SSL 
     OpenSSL::Crypto
+    ${CURL_LIBRARIES}
+    jsoncpp_lib
 )
 
 # Add platform-specific libraries for dynamic loading

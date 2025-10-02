@@ -54,6 +54,55 @@ string SnowflakeSecret::GetSchema() const {
 	return "";
 }
 
+string SnowflakeSecret::GetRole() const {
+	Value value;
+	if (TryGetValue("role", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+// OIDC-specific getter methods
+string SnowflakeSecret::GetOIDCToken() const {
+	Value value;
+	if (TryGetValue("oidc_token", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOIDCClientId() const {
+	Value value;
+	if (TryGetValue("oidc_client_id", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOIDCIssuerUrl() const {
+	Value value;
+	if (TryGetValue("oidc_issuer_url", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOIDCRedirectUri() const {
+	Value value;
+	if (TryGetValue("oidc_redirect_uri", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOIDCScope() const {
+	Value value;
+	if (TryGetValue("oidc_scope", value)) {
+		return value.GetValue<string>();
+	}
+	return "openid"; // Default scope
+}
+
 //! Validate that all required fields are present
 void SnowflakeSecret::Validate() const {
 	vector<string> required_fields = {"account", "database"};
@@ -75,12 +124,17 @@ void SnowflakeSecret::Validate() const {
 	bool has_password_auth = false;
 	bool has_oidc_auth = false;
 
-	Value user_value, password_value, oidc_token_value, token_file_value;
+	Value user_value, password_value, oidc_token_value, oidc_client_id_value, token_file_value;
 	if (TryGetValue("user", user_value) && !user_value.IsNull() &&
 	    TryGetValue("password", password_value) && !password_value.IsNull()) {
 		has_password_auth = true;
 	}
+	
+	// Check for OIDC authentication (either token or client_id for flow)
 	if (TryGetValue("oidc_token", oidc_token_value) && !oidc_token_value.IsNull()) {
+		has_oidc_auth = true;
+	}
+	if (TryGetValue("oidc_client_id", oidc_client_id_value) && !oidc_client_id_value.IsNull()) {
 		has_oidc_auth = true;
 	}
 	if (TryGetValue("token_file_path", token_file_value) && !token_file_value.IsNull()) {
@@ -88,7 +142,7 @@ void SnowflakeSecret::Validate() const {
 	}
 
 	if (!has_password_auth && !has_oidc_auth) {
-		throw InvalidInputException("Snowflake secret requires either 'user' and 'password' for password authentication, or 'oidc_token'/'token_file_path' for OIDC authentication");
+		throw InvalidInputException("Snowflake secret requires either 'user' and 'password' for password authentication, or OIDC parameters ('oidc_token', 'oidc_client_id', or 'token_file_path') for OIDC authentication");
 	}
 
 	if (has_password_auth && has_oidc_auth) {
@@ -135,7 +189,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 
 	// Extract Snowflake-specific parameters from the input options
 	vector<string> required_fields = {"account", "database"};
-	vector<string> optional_fields = {"user", "password", "warehouse", "schema", "oidc_token", "token_file_path", "workload_identity_provider"};
+	vector<string> optional_fields = {"user", "password", "warehouse", "schema", "role", "oidc_token", "oidc_client_id", "oidc_issuer_url", "oidc_redirect_uri", "oidc_scope", "token_file_path", "workload_identity_provider", "private_key"};
 
 	// Process required fields
 	for (const auto &field : required_fields) {
@@ -189,9 +243,19 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["warehouse"] = LogicalType::VARCHAR;
 	create_function.named_parameters["database"] = LogicalType::VARCHAR;
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
+	create_function.named_parameters["role"] = LogicalType::VARCHAR;
+	
+	// OIDC authentication parameters
 	create_function.named_parameters["oidc_token"] = LogicalType::VARCHAR;
+	create_function.named_parameters["oidc_client_id"] = LogicalType::VARCHAR;
+	create_function.named_parameters["oidc_issuer_url"] = LogicalType::VARCHAR;
+	create_function.named_parameters["oidc_redirect_uri"] = LogicalType::VARCHAR;
+	create_function.named_parameters["oidc_scope"] = LogicalType::VARCHAR;
+	
+	// Other authentication methods
 	create_function.named_parameters["token_file_path"] = LogicalType::VARCHAR;
 	create_function.named_parameters["workload_identity_provider"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);

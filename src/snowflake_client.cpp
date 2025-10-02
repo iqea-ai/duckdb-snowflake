@@ -1,6 +1,7 @@
 #include "snowflake_debug.hpp"
 #include "snowflake_client.hpp"
 #include "snowflake_types.hpp"
+#include "auth/flow.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/table/arrow.hpp"
@@ -224,6 +225,10 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 			status = AdbcDatabaseSetOption(&database, "token", config.oidc_token.c_str(), &error);
 			CheckError(status, "Failed to set OIDC token", &error);
 		}
+		break;
+	case SnowflakeAuthType::OIDC:
+		// Handle OIDC authentication flow
+		HandleOIDCAuthentication(config);
 		break;
 	}
 
@@ -685,5 +690,94 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	DPRINT("ExecuteAndGetChunk completed successfully\n");
 	return result_chunk;
 }
+
+void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
+	AdbcError error;
+	std::memset(&error, 0, sizeof(error));
+	AdbcStatusCode status;
+
+	// Validate OIDC configuration
+	if (config.oidc_client_id.empty()) {
+		throw InvalidInputException("OIDC client_id is required for OIDC authentication");
+	}
+	if (config.oidc_issuer_url.empty()) {
+		throw InvalidInputException("OIDC issuer_url is required for OIDC authentication");
+	}
+	if (config.oidc_redirect_uri.empty()) {
+		throw InvalidInputException("OIDC redirect_uri is required for OIDC authentication");
+	}
+
+	// If we already have an OIDC token, use it directly
+	if (!config.oidc_token.empty()) {
+		DPRINT("Using existing OIDC token for authentication\n");
+		status = AdbcDatabaseSetOption(&database, "authenticator", "OAUTH", &error);
+		CheckError(status, "Failed to set authenticator to OAUTH", &error);
+		
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oidc_token.c_str(), &error);
+		CheckError(status, "Failed to set OIDC token", &error);
+		return;
+	}
+
+	// Start OIDC flow to get token
+	DPRINT("Starting OIDC authentication flow\n");
+	
+	// Create OIDC configuration
+	auth::OIDCConfig oidc_config;
+	oidc_config.client_id = config.oidc_client_id;
+	oidc_config.issuer_url = config.oidc_issuer_url;
+	oidc_config.redirect_uri = config.oidc_redirect_uri;
+	oidc_config.scope = config.oidc_scope;
+
+	// Create OIDC flow
+	auth::OIDCFlow oidc_flow(oidc_config);
+
+	// Start authorization flow and get the authorization URL
+	std::string auth_url = oidc_flow.StartAuthFlow([](const std::string& url) {
+		DPRINT("Please visit the following URL to complete authentication:\n%s\n", url.c_str());
+		DPRINT("After authentication, you will be redirected to a URL with an authorization code.\n");
+		DPRINT("Please provide the authorization code to continue.\n");
+	});
+
+	// For interactive environments, we can prompt for the authorization code
+	// For now, we'll use a simplified approach that works with pre-obtained tokens
+	// In a full implementation, this would integrate with a UI or callback system
+	
+	DPRINT("OIDC authorization URL generated: %s\n", auth_url.c_str());
+	DPRINT("To complete OIDC authentication:\n");
+	DPRINT("1. Visit the URL above in your browser\n");
+	DPRINT("2. Complete authentication with your identity provider\n");
+	DPRINT("3. Copy the authorization code from the redirect URL\n");
+	DPRINT("4. Use the authorization code with the OIDC token exchange\n");
+	DPRINT("5. Set the resulting access token in your configuration\n");
+	
+	// For now, we'll throw an exception with detailed instructions
+	// In a production implementation, this would be handled by a callback system
+	throw NotImplementedException(
+		"OIDC authentication flow requires interactive completion. "
+		"Please visit the authorization URL, complete authentication, and provide the authorization code. "
+		"URL: " + auth_url + 
+		"\n\nAlternatively, you can pre-obtain an OIDC token and set it in the configuration using 'oidc_token' parameter."
+	);
+}
+
+std::string SnowflakeClient::CompleteOIDCFlow(const std::string &authorization_code, const auth::OIDCConfig &oidc_config) {
+	DPRINT("Completing OIDC flow with authorization code\n");
+	
+	// Create OIDC flow instance
+	auth::OIDCFlow oidc_flow(oidc_config);
+	
+	// Exchange authorization code for tokens
+	// Note: We need the state parameter, but for now we'll use an empty string
+	// In a real implementation, the state should be validated
+	auth::TokenResponse token_response = oidc_flow.ExchangeCodeForToken(authorization_code, "");
+	
+	if (!token_response.IsValid()) {
+		throw InvalidInputException("OIDC token exchange failed: " + token_response.error_description);
+	}
+	
+	DPRINT("OIDC token exchange successful\n");
+	return token_response.access_token;
+}
+
 } // namespace snowflake
 } // namespace duckdb

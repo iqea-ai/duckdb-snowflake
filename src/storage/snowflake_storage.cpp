@@ -23,26 +23,30 @@ static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, C
 	}
 
 	if (secret_entry != info.options.end()) {
-		// Use SECRET to get credentials
+		// Use SECRET to get credentials (PREFERRED METHOD)
 		string secret_name = secret_entry->second.ToString();
-		DPRINT("Using SECRET: %s\n", secret_name.c_str());
+		DPRINT("Using SECRET: %s (PREFERRED METHOD)\n", secret_name.c_str());
 
 		try {
 			config = SnowflakeSecretsHelper::GetCredentials(context, secret_name);
-			DPRINT("Retrieved config from secret - Database: %s\n", config.database.c_str());
+			DPRINT("Retrieved config from secret - Database: %s, Auth Type: %s\n", 
+			       config.database.c_str(), 
+			       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
 		} catch (const std::exception &e) {
 			throw InvalidInputException("Failed to retrieve Snowflake credentials from secret '%s': %s",
 			                            secret_name.c_str(), e.what());
 		}
 	} else if (!info.path.empty()) {
-		// Fall back to connection string parsing
-		DPRINT("Using connection string from path\n");
+		// Fall back to connection string parsing (LEGACY METHOD)
+		DPRINT("Using connection string from path (LEGACY METHOD)\n");
 		config = SnowflakeConfig::ParseConnectionString(info.path);
-		DPRINT("Parsed config - Database: %s\n", config.database.c_str());
+		DPRINT("Parsed config - Database: %s, Auth Type: %s\n", 
+		       config.database.c_str(),
+		       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
 	} else {
-		throw InvalidInputException("Snowflake ATTACH requires either a connection string or SECRET option. "
-		                            "Usage: ATTACH 'connection_string' AS name (TYPE snowflake) "
-		                            "or ATTACH '' AS name (TYPE snowflake, SECRET secret_name)");
+		throw InvalidInputException("Snowflake ATTACH requires either a SECRET option (PREFERRED) or connection string (LEGACY). "
+		                            "Usage: ATTACH '' AS name (TYPE snowflake, SECRET secret_name) "
+		                            "or ATTACH 'connection_string' AS name (TYPE snowflake)");
 	}
 
 	if (access_mode != AccessMode::READ_ONLY) {

@@ -6,7 +6,7 @@
 namespace duckdb {
 namespace snowflake {
 
-enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR, WORKLOAD_IDENTITY };
+enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR, WORKLOAD_IDENTITY, OIDC };
 
 struct SnowflakeConfig {
 	std::string account;
@@ -21,6 +21,13 @@ struct SnowflakeConfig {
 	std::string oidc_token;
 	std::string token_file_path;
 	std::string workload_identity_provider;
+	
+	// OIDC configuration
+	std::string oidc_client_id;
+	std::string oidc_issuer_url;
+	std::string oidc_redirect_uri;
+	std::string oidc_scope = "openid";
+	
 	int32_t query_timeout = 300; // seconds
 	bool keep_alive = true;
 	bool use_high_precision = true; // When false, DECIMAL(p,0) converts to INT64
@@ -62,6 +69,10 @@ public:
 		HashCombine(seed, config.oidc_token);
 		HashCombine(seed, config.token_file_path);
 		HashCombine(seed, config.workload_identity_provider);
+		HashCombine(seed, config.oidc_client_id);
+		HashCombine(seed, config.oidc_issuer_url);
+		HashCombine(seed, config.oidc_redirect_uri);
+		HashCombine(seed, config.oidc_scope);
 
 		return seed;
 	}
