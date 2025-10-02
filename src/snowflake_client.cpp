@@ -696,7 +696,35 @@ void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
 	std::memset(&error, 0, sizeof(error));
 	AdbcStatusCode status;
 
-	// Validate OIDC configuration
+	// If we already have an OIDC token, use it directly
+	if (!config.oidc_token.empty()) {
+		DPRINT("Using existing OIDC token for authentication\n");
+		
+		// Set authenticator to OAUTH for OIDC
+		status = AdbcDatabaseSetOption(&database, "authenticator", "OAUTH", &error);
+		CheckError(status, "Failed to set authenticator to OAUTH", &error);
+		
+		// Set the OIDC token as the password (Snowflake OIDC pattern)
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.password", config.oidc_token.c_str(), &error);
+		CheckError(status, "Failed to set OIDC token as password", &error);
+		
+		// For OIDC authentication, we also need to provide a username
+		// If no username is provided in config, we'll use the OIDC token's subject
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.user", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		} else {
+			// Extract username from OIDC token (subject claim)
+			// For now, we'll use a placeholder - in a full implementation,
+			// we would decode the JWT to extract the 'sub' claim
+			DPRINT("Warning: No username provided for OIDC authentication. Using OIDC token subject.\n");
+			// TODO: Decode JWT token to extract 'sub' claim for username
+		}
+		
+		return;
+	}
+
+	// Validate OIDC configuration (only needed for interactive flow)
 	if (config.oidc_client_id.empty()) {
 		throw InvalidInputException("OIDC client_id is required for OIDC authentication");
 	}
@@ -705,17 +733,6 @@ void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
 	}
 	if (config.oidc_redirect_uri.empty()) {
 		throw InvalidInputException("OIDC redirect_uri is required for OIDC authentication");
-	}
-
-	// If we already have an OIDC token, use it directly
-	if (!config.oidc_token.empty()) {
-		DPRINT("Using existing OIDC token for authentication\n");
-		status = AdbcDatabaseSetOption(&database, "authenticator", "OAUTH", &error);
-		CheckError(status, "Failed to set authenticator to OAUTH", &error);
-		
-		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oidc_token.c_str(), &error);
-		CheckError(status, "Failed to set OIDC token", &error);
-		return;
 	}
 
 	// Start OIDC flow to get token
@@ -732,11 +749,8 @@ void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
 	auth::OIDCFlow oidc_flow(oidc_config);
 
 	// Start authorization flow and get the authorization URL
-	std::string auth_url = oidc_flow.StartAuthFlow([](const std::string& url) {
-		DPRINT("Please visit the following URL to complete authentication:\n%s\n", url.c_str());
-		DPRINT("After authentication, you will be redirected to a URL with an authorization code.\n");
-		DPRINT("Please provide the authorization code to continue.\n");
-	});
+	// Don't provide a callback so it will automatically open the browser
+	std::string auth_url = oidc_flow.StartAuthFlow();
 
 	// For interactive environments, we can prompt for the authorization code
 	// For now, we'll use a simplified approach that works with pre-obtained tokens

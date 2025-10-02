@@ -49,9 +49,9 @@ static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, C
 		                            "or ATTACH 'connection_string' AS name (TYPE snowflake)");
 	}
 
-	if (access_mode != AccessMode::READ_ONLY) {
-		throw NotImplementedException("Snowflake currently only supports read-only access");
-	}
+	// Snowflake extension only supports read-only access
+	// Force read-only mode regardless of what was requested
+	access_mode = AccessMode::READ_ONLY;
 
 	DPRINT("Creating SnowflakeCatalog\n");
 	return make_uniq<SnowflakeCatalog>(db, config);

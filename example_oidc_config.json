@@ -1,12 +1,12 @@
 {
   "snowflake_connection": {
-    "account": "your-account.snowflakecomputing.com",
-    "warehouse": "COMPUTE_WH",
-    "database": "SNOWFLAKE_SAMPLE_DATA",
-    "role": "PUBLIC",
+    "account": "YOUR_ACCOUNT.snowflakecomputing.com",
+    "warehouse": "YOUR_WAREHOUSE",
+    "database": "YOUR_DATABASE",
+    "role": "YOUR_ROLE",
     "auth_type": "OIDC",
-    "oidc_client_id": "your-okta-client-id",
-    "oidc_issuer_url": "https://your-okta-domain.okta.com/oauth2/default",
+    "oidc_client_id": "YOUR_OKTA_CLIENT_ID",
+    "oidc_issuer_url": "https://YOUR_OKTA_DOMAIN.okta.com/oauth2/YOUR_AUTH_SERVER_ID",
     "oidc_redirect_uri": "http://localhost:8080/callback",
     "oidc_scope": "openid profile email",
     "query_timeout": 300,
@@ -21,7 +21,7 @@
       "3. Use the extension with OIDC auth type",
       "4. The extension will guide you through the OIDC flow"
     ],
-    "connection_string_example": "account=your-account;warehouse=COMPUTE_WH;database=SNOWFLAKE_SAMPLE_DATA;role=PUBLIC;auth_type=OIDC;oidc_client_id=your-client-id;oidc_issuer_url=https://your-okta-domain.okta.com/oauth2/default;oidc_redirect_uri=http://localhost:8080/callback"
+    "connection_string_example": "account=YOUR_ACCOUNT;warehouse=YOUR_WAREHOUSE;database=YOUR_DATABASE;role=YOUR_ROLE;auth_type=OIDC;oidc_client_id=YOUR_CLIENT_ID;oidc_issuer_url=https://YOUR_OKTA_DOMAIN.okta.com/oauth2/YOUR_AUTH_SERVER_ID;oidc_redirect_uri=http://localhost:8080/callback"
   },
   "security_notes": [
     "PKCE (Proof Key for Code Exchange) is used for security",

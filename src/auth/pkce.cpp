@@ -77,7 +77,7 @@ std::string PKCEGenerator::GenerateState(size_t length) {
 }
 
 std::string PKCEGenerator::Base64UrlEncode(const std::array<uint8_t, 32>& data) {
-    // Base64url alphabet (RFC 4648)
+    // Base64url alphabet (RFC 4648) - using - and _ instead of + and /
     const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     
     std::string result;
@@ -100,9 +100,15 @@ std::string PKCEGenerator::Base64UrlEncode(const std::array<uint8_t, 32>& data) 
                 result += alphabet[(value >> (18 - j * 6)) & 0x3F];
                 bits -= 6;
             } else {
-                break;
+                // Add padding for incomplete groups (but we'll strip it later)
+                result += '=';
             }
         }
+    }
+    
+    // Strip padding characters (base64url doesn't use padding)
+    while (!result.empty() && result.back() == '=') {
+        result.pop_back();
     }
     
     return result;

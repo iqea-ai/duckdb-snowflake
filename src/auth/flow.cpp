@@ -98,12 +98,12 @@ std::string OIDCFlow::BuildAuthorizationURL() const {
     std::stringstream url;
     url << config_.issuer_url;
     
-    // Ensure issuer URL ends with /authorize
-    if (!StringUtil::EndsWith(config_.issuer_url, "/authorize")) {
+    // Ensure issuer URL ends with /v1/authorize (Okta format)
+    if (!StringUtil::EndsWith(config_.issuer_url, "/v1/authorize")) {
         if (!StringUtil::EndsWith(config_.issuer_url, "/")) {
             url << "/";
         }
-        url << "authorize";
+        url << "v1/authorize";
     }
     
     // Add query parameters
