@@ -14,26 +14,39 @@ LOAD snowflake;
 
 ### Basic Usage
 
+#### Password Authentication
 ```sql
--- 1. Create a Snowflake profile
+-- 1. Create a Snowflake profile with password authentication
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'your_account.snowflakecomputing.com',
-    USER 'your_username',
-    PASSWORD 'your_password',
-    DATABASE 'your_database',
-    WAREHOUSE 'your_warehouse'
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    PASSWORD 'YOUR_PASSWORD',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE'
 );
 
--- 2.1 Query Snowflake data using pass through query
+-- 2. Query Snowflake data
 SELECT * FROM snowflake_scan(
     'SELECT * FROM customers WHERE state = ''CA''',
     'my_snowflake_secret'
 );
+```
 
--- 2.2 Query Snowflake data using local duckdb SQL syntax
-ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_secret, READ_ONLY);
+#### OIDC Authentication (Recommended)
+```sql
+-- 1. Create a Snowflake profile with OIDC authentication
+CREATE SECRET my_snowflake_oidc (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    ROLE 'YOUR_ROLE',
+    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
+);
 
+-- 2. Attach and query using OIDC
+ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_oidc, ACCESS_MODE READ_ONLY);
 SELECT * FROM snow_db.schema.customers WHERE state = 'CA';
 ```
 
@@ -57,8 +70,9 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 - **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Secure Authentication**: Password-based authentication with secure credential storage
-- **Secret Management**: Secure credential storage using DuckDB's secrets system
+- **Multiple Authentication Methods**: Password-based, OAuth, Key Pair, Workload Identity, and OIDC authentication
+- **OIDC Support**: Full OpenID Connect authentication with PKCE security and DuckDB secrets integration
+- **Secret Management**: Secure credential storage using DuckDB's secrets system (recommended for OIDC)
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
 ## Installation
@@ -215,18 +229,32 @@ SELECT snowflake_version();
 
 Create a named profile to securely store your Snowflake credentials:
 
-**Creating a Secret:**
+**Creating a Secret with Password Authentication:**
 
 ```sql
--- Secret with optional parameters
+-- Secret with password authentication
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'adbniqz-ct69933',
-    USER 'myusername',
-    PASSWORD 'mypassword',
-    DATABASE 'mydatabase',
-    WAREHOUSE 'mywarehouse',
-    SCHEMA 'myschema'  -- Optional: default schema
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    PASSWORD 'YOUR_PASSWORD',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    SCHEMA 'YOUR_SCHEMA'  -- Optional: default schema
+);
+```
+
+**Creating a Secret with OIDC Authentication:**
+
+```sql
+-- Secret with OIDC authentication (recommended for production)
+CREATE SECRET my_snowflake_oidc (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    ROLE 'YOUR_ROLE',
+    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
 );
 ```
 
@@ -254,6 +282,120 @@ CREATE SECRET ...
 ```sql
 -- Remove a secret
 DROP SECRET my_snowflake_secret;
+```
+
+## OIDC Authentication
+
+The DuckDB Snowflake extension supports OpenID Connect (OIDC) authentication with DuckDB secrets as the default and recommended method. OIDC provides enhanced security through JWT tokens and eliminates the need for password management.
+
+### OIDC Authentication Methods
+
+#### Pre-obtained Token (Recommended for Production)
+
+Use this method when you already have a valid JWT access token from your OIDC provider:
+
+```sql
+-- Create secret with existing OIDC token
+CREATE SECRET snowflake_oidc (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    ROLE 'YOUR_ROLE',
+    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
+);
+
+-- Use immediately
+ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_oidc, ACCESS_MODE READ_ONLY);
+SELECT * FROM sf.YOUR_SCHEMA.YOUR_TABLE LIMIT 10;
+```
+
+#### Interactive OIDC Flow
+
+Use this method to trigger an interactive OIDC authentication flow:
+
+```sql
+-- Create secret with OIDC configuration
+CREATE SECRET snowflake_oidc_interactive (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    ROLE 'YOUR_ROLE',
+    OIDC_CLIENT_ID 'YOUR_OKTA_CLIENT_ID',
+    OIDC_ISSUER_URL 'https://YOUR_OKTA_DOMAIN.okta.com/oauth2/YOUR_AUTH_SERVER_ID',
+    OIDC_REDIRECT_URI 'http://localhost:8080/callback',
+    OIDC_SCOPE 'openid profile email'
+);
+
+-- This will trigger interactive OIDC flow
+ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_oidc_interactive, ACCESS_MODE READ_ONLY);
+```
+
+### OIDC Configuration Parameters
+
+**Required Parameters:**
+- `ACCOUNT` - Your Snowflake account identifier
+- `DATABASE` - Target database name
+
+**Optional Parameters:**
+- `WAREHOUSE` - Snowflake warehouse name
+- `ROLE` - Snowflake role name
+- `SCHEMA` - Default schema name
+
+**OIDC Authentication Parameters:**
+- `OIDC_TOKEN` - Pre-obtained JWT access token (recommended for production)
+- `OIDC_CLIENT_ID` - OIDC client ID for interactive flow
+- `OIDC_ISSUER_URL` - OIDC issuer URL (e.g., Okta authorization server)
+- `OIDC_REDIRECT_URI` - OAuth redirect URI
+- `OIDC_SCOPE` - OAuth scopes (default: "openid")
+
+### OIDC Security Features
+
+- **PKCE (Proof Key for Code Exchange)** - Prevents authorization code interception attacks
+- **State Parameter Validation** - Protects against CSRF attacks
+- **Encrypted Credential Storage** - OIDC tokens stored securely in DuckDB secrets
+- **JWT Token Validation** - Automatic token validation and username extraction
+- **Cross-Platform Browser Support** - Automatic browser launch for interactive flows
+
+### OIDC Provider Support
+
+The extension works with any OIDC-compliant provider including Okta, Auth0, Azure AD, Google Identity, and custom OIDC providers.
+
+### OIDC Best Practices
+
+**Use Descriptive Secret Names:**
+```sql
+CREATE SECRET snowflake_prod_analytics (...);
+```
+
+**Environment Separation:**
+```sql
+CREATE SECRET snowflake_dev (...);
+CREATE SECRET snowflake_staging (...);
+CREATE SECRET snowflake_prod (...);
+```
+
+**Token Rotation:**
+```sql
+DROP SECRET snowflake_prod;
+CREATE SECRET snowflake_prod (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    OIDC_TOKEN 'NEW_ROTATED_TOKEN_HERE'
+);
+```
+
+**Minimal Permissions:**
+```sql
+CREATE SECRET snowflake_readonly (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    ROLE 'READONLY_ROLE',
+    OIDC_TOKEN 'READONLY_TOKEN_HERE'
+);
 ```
 
 ## Functions Reference
@@ -414,11 +556,21 @@ SELECT * FROM snowflake_scan(
 
 ## Security Best Practices
 
+### Password Authentication
 1. **Use Strong Passwords**: Create complex passwords for your Snowflake accounts
 2. **Principle of Least Privilege**: Use Snowflake roles with minimal required permissions
 3. **Regular Rotation**: Update passwords and credentials regularly
 4. **Environment Separation**: Use different secrets for dev/test/prod environments
 5. **Secure Storage**: Secrets are stored encrypted in DuckDB's internal storage
+
+### OIDC Authentication (Recommended)
+1. **Use OIDC Tokens**: Prefer OIDC authentication over passwords for enhanced security
+2. **Token Rotation**: Regularly rotate OIDC tokens for better security
+3. **PKCE Security**: The extension automatically uses PKCE for secure OIDC flows
+4. **State Validation**: CSRF protection is built into the OIDC implementation
+5. **Encrypted Storage**: OIDC tokens are stored securely in DuckDB secrets
+6. **Provider Integration**: Works with enterprise identity providers (Okta, Auth0, Azure AD)
+7. **No Password Storage**: Eliminates password management and storage risks
 
 ## Support
 

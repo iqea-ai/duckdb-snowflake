@@ -175,12 +175,12 @@ DETACH snowflake_db;
 -- Key Benefits of OIDC Authentication:
 -- =============================================================================
 -- 
--- ✅ Security: JWT tokens with expiration and scope control
--- ✅ SSO Integration: Works with enterprise identity providers
--- ✅ No Password Storage: Eliminates password management
--- ✅ Audit Trail: Better logging and compliance
--- ✅ Token Refresh: Automatic token renewal support
--- ✅ DuckDB Secrets: Encrypted credential storage
+--  Security: JWT tokens with expiration and scope control
+--  SSO Integration: Works with enterprise identity providers
+--  No Password Storage: Eliminates password management
+--  Audit Trail: Better logging and compliance
+--  Token Refresh: Automatic token renewal support
+--  DuckDB Secrets: Encrypted credential storage
 --
 -- =============================================================================
 -- Troubleshooting:
