@@ -26,7 +26,7 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(const std::vector<TableFilte
 	for (size_t i = 0; i < filters.size(); i++) {
 		const auto &filter = filters[i];
 		if (i >= column_names.size()) {
-			DPRINT("Warning: Filter index %zu exceeds column names size %zu\n", i, column_names.size());
+			DPRINT("Warning: Filter index %zu exceeds column names size %zu - skipping filter\n", i, column_names.size());
 			continue;
 		}
 
@@ -34,20 +34,20 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(const std::vector<TableFilte
 			std::string condition = TransformFilter(filter, column_names[i]);
 			if (!condition.empty()) {
 				conditions.push_back(condition);
+				DPRINT("Successfully transformed filter %zu on column '%s'\n", i, column_names[i].c_str());
+			} else {
+				DPRINT("Warning: Filter %zu on column '%s' produced empty condition - skipping\n", i, column_names[i].c_str());
 			}
-		} catch (const std::invalid_argument &e) {
-			// Invalid input - this is a critical error that should not be ignored
-			DPRINT("Error: Invalid filter %zu: %s\n", i, e.what());
-			throw; // Re-throw to prevent silent failures
 		} catch (const std::exception &e) {
-			// Other errors - log and continue with graceful fallback
-			DPRINT("Warning: Failed to transform filter %zu: %s\n", i, e.what());
-			// Continue with other filters - graceful fallback
+			// Log and continue with partial pushdown
+			// This allows other filters to still be pushed down
+			DPRINT("Warning: Failed to transform filter %zu on column '%s': %s - continuing with other filters\n",
+			       i, column_names[i].c_str(), e.what());
 		}
 	}
 
 	if (conditions.empty()) {
-		DPRINT("No valid filter conditions could be generated\n");
+		DPRINT("No valid filter conditions could be generated from %zu filter(s)\n", filters.size());
 		return "";
 	}
 
@@ -59,6 +59,13 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(const std::vector<TableFilte
 		}
 		result += conditions[i];
 	}
+
+	if (conditions.size() < filters.size()) {
+		DPRINT("Partial pushdown: %zu of %zu filters successfully converted\n", conditions.size(), filters.size());
+	} else {
+		DPRINT("Full pushdown: all %zu filter(s) successfully converted\n", conditions.size());
+	}
+
 	return result;
 }
 
@@ -76,8 +83,8 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
 		const auto &filter = filter_entry.second;
 
 		if (column_index >= column_names.size()) {
-			DPRINT("Warning: Filter column index %llu exceeds column names size %zu\n", column_index,
-			       column_names.size());
+			DPRINT("Warning: Filter column index %llu exceeds column names size %zu - skipping filter\n",
+			       column_index, column_names.size());
 			continue;
 		}
 
@@ -85,20 +92,22 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
 			std::string condition = TransformFilter(*filter, column_names[column_index]);
 			if (!condition.empty()) {
 				conditions.push_back(condition);
+				DPRINT("Successfully transformed filter on column %llu ('%s')\n", column_index,
+				       column_names[column_index].c_str());
+			} else {
+				DPRINT("Warning: Filter on column %llu ('%s') produced empty condition - skipping\n",
+				       column_index, column_names[column_index].c_str());
 			}
-		} catch (const std::invalid_argument &e) {
-			// Invalid input - this is a critical error that should not be ignored
-			DPRINT("Error: Invalid filter for column %llu: %s\n", column_index, e.what());
-			throw; // Re-throw to prevent silent failures
 		} catch (const std::exception &e) {
-			// Other errors - log and continue with graceful fallback
-			DPRINT("Warning: Failed to transform filter for column %llu: %s\n", column_index, e.what());
-			// Continue with other filters - graceful fallback
+			// Log and continue with partial pushdown
+			// This allows other filters to still be pushed down
+			DPRINT("Warning: Failed to transform filter on column %llu ('%s'): %s - continuing with other filters\n",
+			       column_index, column_names[column_index].c_str(), e.what());
 		}
 	}
 
 	if (conditions.empty()) {
-		DPRINT("No valid filter conditions could be generated\n");
+		DPRINT("No valid filter conditions could be generated from %zu filter(s)\n", filter_set->filters.size());
 		return "";
 	}
 
@@ -110,6 +119,14 @@ std::string SnowflakeQueryBuilder::BuildWhereClause(TableFilterSet *filter_set,
 		}
 		result += conditions[i];
 	}
+
+	if (conditions.size() < filter_set->filters.size()) {
+		DPRINT("Partial pushdown: %zu of %zu filters successfully converted\n", conditions.size(),
+		       filter_set->filters.size());
+	} else {
+		DPRINT("Full pushdown: all %zu filter(s) successfully converted\n", conditions.size());
+	}
+
 	return result;
 }
 
@@ -154,13 +171,30 @@ std::string SnowflakeQueryBuilder::ModifyQuery(const std::string &original_query
 	std::string modified_query = original_query;
 	bool query_modified = false;
 
-	// If we have a WHERE clause, append it to the query
+	// If we have a WHERE clause, insert it in the correct position
 	if (!where_clause.empty()) {
 		// Use more sophisticated WHERE detection that ignores comments and strings
 		if (!HasWhereClause(modified_query)) {
-			modified_query += " " + where_clause;
+			// Find the correct position to insert WHERE:
+			// It should go after FROM/JOIN and before GROUP BY/HAVING/ORDER BY/LIMIT/OFFSET
+			std::string upper_query = StringUtil::Upper(modified_query);
+
+			// Find positions of clauses that come after WHERE
+			size_t insert_pos = modified_query.length();
+			std::vector<std::string> after_where = {"GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET"};
+
+			for (const auto &clause : after_where) {
+				size_t pos = upper_query.find(" " + clause);
+				if (pos != std::string::npos && pos < insert_pos) {
+					insert_pos = pos;
+				}
+			}
+
+			// Insert WHERE clause at the correct position
+			modified_query = modified_query.substr(0, insert_pos) + " " + where_clause +
+			                 modified_query.substr(insert_pos);
 			query_modified = true;
-			DPRINT("Added WHERE clause: %s\n", where_clause.c_str());
+			DPRINT("Inserted WHERE clause at position %zu: %s\n", insert_pos, where_clause.c_str());
 		} else {
 			DPRINT("Query already has WHERE clause, skipping WHERE modification\n");
 		}
@@ -433,42 +467,22 @@ std::string snowflake::SnowflakeQueryBuilder::ValueToSqlLiteral(const Value &val
 }
 
 std::string snowflake::SnowflakeQueryBuilder::EscapeSqlIdentifier(const std::string &identifier) {
-	// Validate identifier format - only alphanumeric and underscore allowed
+	// Always use double quotes for identifiers to handle reserved keywords and special characters
+	// This is the safest approach - Snowflake supports quoted identifiers for any valid name
+
 	if (identifier.empty()) {
 		throw std::invalid_argument("Empty identifier not allowed");
 	}
 
-	// Check first character - must be letter or underscore
-	if (!std::isalpha(identifier[0]) && identifier[0] != '_') {
-		throw std::invalid_argument("Invalid identifier: must start with letter or underscore");
-	}
-
-	// Check remaining characters - must be alphanumeric or underscore
-	for (size_t i = 1; i < identifier.length(); i++) {
-		if (!std::isalnum(identifier[i]) && identifier[i] != '_') {
-			throw std::invalid_argument("Invalid identifier: contains invalid character '" +
-			                            std::string(1, identifier[i]) + "'");
-		}
-	}
-
-	// Check for reserved keywords
-	static const std::set<std::string> reserved_keywords = {
-	    "SELECT",    "FROM",        "WHERE",  "AND",      "OR",     "NOT",    "IN",    "BETWEEN", "LIKE",
-	    "IS",        "NULL",        "ORDER",  "BY",       "GROUP",  "HAVING", "LIMIT", "OFFSET",  "DISTINCT",
-	    "ALL",       "ANY",         "SOME",   "EXISTS",   "CASE",   "WHEN",   "THEN",  "ELSE",    "END",
-	    "AS",        "ON",          "JOIN",   "INNER",    "LEFT",   "RIGHT",  "FULL",  "OUTER",   "UNION",
-	    "INTERSECT", "EXCEPT",      "INSERT", "UPDATE",   "DELETE", "CREATE", "DROP",  "ALTER",   "TABLE",
-	    "INDEX",     "VIEW",        "SCHEMA", "DATABASE", "USER",   "ROLE",   "GRANT", "REVOKE",  "COMMIT",
-	    "ROLLBACK",  "TRANSACTION", "BEGIN",  "END"};
-
-	std::string upper_identifier = StringUtil::Upper(identifier);
-	if (reserved_keywords.find(upper_identifier) != reserved_keywords.end()) {
-		throw std::invalid_argument("Invalid identifier: '" + identifier + "' is a reserved keyword");
-	}
-
-	// Proper escaping - escape double quotes
+	// Escape double quotes by doubling them (SQL standard)
 	std::string escaped = identifier;
 	StringUtil::Replace(escaped, "\"", "\"\"");
+
+	// Always return quoted identifier - this handles:
+	// 1. Reserved keywords (SELECT, FROM, WHERE, USER, ORDER, etc.)
+	// 2. Special characters (spaces, hyphens, etc.)
+	// 3. Case-sensitive names
+	// 4. Mixed case preservation
 	return "\"" + escaped + "\"";
 }
 
@@ -506,33 +520,49 @@ std::string snowflake::SnowflakeQueryBuilder::EscapeSqlLiteral(const std::string
 
 // Helper functions for enhanced query modification
 bool snowflake::SnowflakeQueryBuilder::IsValidSimpleSelectQuery(const std::string &query) {
-	// Basic validation for simple SELECT queries
+	// Validation for queries that support pushdown
+	// We allow ORDER BY and GROUP BY since WHERE can be inserted before them
 	std::string trimmed_query = query;
 	StringUtil::Trim(trimmed_query);
 	std::string upper_query = StringUtil::Upper(trimmed_query);
 
 	// Must start with SELECT
 	if (!StringUtil::StartsWith(upper_query, "SELECT")) {
+		DPRINT("Query validation failed: does not start with SELECT\n");
 		return false;
 	}
 
 	// Must contain FROM
 	if (upper_query.find(" FROM ") == std::string::npos) {
+		DPRINT("Query validation failed: no FROM clause found\n");
 		return false;
 	}
 
-	// Check for unsupported constructs
+	// Check for truly unsupported constructs that prevent pushdown
+	// Note: ORDER BY and GROUP BY are now ALLOWED - we can add WHERE before them
+	// Note: LIMIT/OFFSET are allowed - WHERE can be added before them
 	std::vector<std::string> unsupported = {
-	    "UNION", "INTERSECT", "EXCEPT", "WITH",  "CTE",      "WINDOW", "PARTITION", "JOIN",  "INNER", "LEFT",
-	    "RIGHT", "FULL",      "OUTER",  "CROSS", "GROUP BY", "HAVING", "ORDER BY",  "LIMIT", "OFFSET"};
+	    "UNION",     // Set operations require special handling
+	    "INTERSECT", // Set operations require special handling
+	    "EXCEPT",    // Set operations require special handling
+	    "WITH",      // CTEs make query structure complex
+	    " JOIN ",    // Joins (with space) - would need complex filter placement
+	    "INNER JOIN",
+	    "LEFT JOIN",
+	    "RIGHT JOIN",
+	    "FULL JOIN",
+	    "OUTER JOIN",
+	    "CROSS JOIN"
+	};
 
 	for (const auto &construct : unsupported) {
 		if (upper_query.find(construct) != std::string::npos) {
-			DPRINT("Query contains unsupported construct: %s\n", construct.c_str());
+			DPRINT("Query validation failed: contains unsupported construct '%s'\n", construct.c_str());
 			return false;
 		}
 	}
 
+	DPRINT("Query validation passed\n");
 	return true;
 }
 
