@@ -16,7 +16,7 @@ SnowflakeCatalog::SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig
 }
 
 SnowflakeCatalog::~SnowflakeCatalog() {
-	// TODO consider adding option to allow connections to persist if user wants to DETACH and ATTACH multiple times
+	// Note: Consider adding option to allow connections to persist for multiple DETACH/ATTACH operations
 	auto &client_manager = SnowflakeClientManager::GetInstance();
 	client_manager.ReleaseConnection(client->GetConfig());
 }
