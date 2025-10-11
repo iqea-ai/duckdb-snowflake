@@ -27,6 +27,31 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	auto query = input.inputs[0].GetValue<string>();
 	auto profile = input.inputs[1].GetValue<string>();
 
+	// WORKAROUND for column reordering segfault:
+	// If query has explicit column list (not SELECT *), we risk segfaults when DuckDB reorders
+	// Convert "SELECT col1, col2 FROM ..." to "SELECT * FROM ..." to prevent crashes
+	// Projection pushdown will still work - only needed columns are transferred
+	std::string upper_query = StringUtil::Upper(query);
+	std::string trimmed_query = query;
+	StringUtil::Trim(trimmed_query);
+
+	if (StringUtil::StartsWith(upper_query, "SELECT") && upper_query.find(" FROM ") != std::string::npos) {
+		size_t select_pos = upper_query.find("SELECT") + 6;
+		size_t from_pos = upper_query.find(" FROM ");
+		std::string select_part = upper_query.substr(select_pos, from_pos - select_pos);
+		StringUtil::Trim(select_part);
+
+		// Check if it's NOT "SELECT *" or "SELECT DISTINCT *"
+		if (select_part != "*" && select_part != "DISTINCT *") {
+			// Has explicit column list - replace with SELECT * to prevent segfault
+			std::string before_select = query.substr(0, query.find("SELECT") + 6);
+			std::string after_from = query.substr(query.find(" FROM "));
+			query = before_select + " * " + after_from;
+			DPRINT("Auto-converted explicit column list to SELECT * to prevent reordering segfault\n");
+			DPRINT("Modified query: %s\n", query.c_str());
+		}
+	}
+
 	// Get config from profile
 	SnowflakeConfig config;
 	try {
