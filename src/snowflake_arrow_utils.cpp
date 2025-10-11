@@ -29,6 +29,7 @@ public:
 unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr,
                                                               ArrowStreamParameters &parameters) {
 	auto factory = reinterpret_cast<SnowflakeArrowStreamFactory *>(factory_ptr);
+
 	DPRINT("SnowflakeProduceArrowScan: factory=%p, statement_initialized=%d\n", (void *)factory,
 	       factory->statement_initialized);
 
