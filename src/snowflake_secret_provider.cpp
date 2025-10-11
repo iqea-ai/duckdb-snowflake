@@ -70,6 +70,45 @@ void SnowflakeSecret::Validate() const {
 		throw InvalidInputException("Snowflake secret is missing required fields: %s",
 		                            StringUtil::Join(missing_fields, ", "));
 	}
+
+	// Validate account format - should be ACCOUNT_ID not ACCOUNT_ID.snowflakecomputing.com
+	Value account_value;
+	if (TryGetValue("account", account_value) && !account_value.IsNull()) {
+		string account = account_value.GetValue<string>();
+
+		// Check for .snowflakecomputing.com suffix (common mistake that causes hangs)
+		if (account.find(".snowflakecomputing.com") != string::npos) {
+			throw InvalidInputException(
+			    "Invalid Snowflake account format: '%s'. "
+			    "Please use only the account identifier (e.g., 'MYACCOUNT-12345'), not the full hostname. "
+			    "Remove '.snowflakecomputing.com' from the account parameter. "
+			    "Using the full hostname causes connection timeouts.",
+			    account);
+		}
+
+		// Check for URL format (another common mistake)
+		if (account.find("://") != string::npos || account.find("http") != string::npos) {
+			throw InvalidInputException(
+			    "Invalid Snowflake account format: '%s'. "
+			    "Account should be just the account identifier (e.g., 'MYACCOUNT-12345'), not a URL.",
+			    account);
+		}
+
+		// Warn about periods in account (might be org-account format which is OK)
+		// Format: orgname-accountname is valid, but orgname.accountname.snowflakecomputing.com is not
+		size_t dot_count = 0;
+		for (char c : account) {
+			if (c == '.')
+				dot_count++;
+		}
+		if (dot_count > 1) {
+			// Multiple dots likely means full hostname was used
+			throw InvalidInputException(
+			    "Invalid Snowflake account format: '%s'. "
+			    "Account should use hyphen format (e.g., 'ORGNAME-ACCOUNTNAME'), not dot-separated hostname.",
+			    account);
+		}
+	}
 }
 
 //! Custom serialization for Snowflake secrets
@@ -122,6 +161,40 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 
 		// Store the value in the secret map
 		secret->secret_map[field] = it->second;
+
+		// Validate account format immediately when processing 'account' field
+		if (field == "account" && !it->second.IsNull()) {
+			string account = it->second.GetValue<string>();
+
+			// Check for .snowflakecomputing.com suffix (causes connection hangs)
+			if (account.find(".snowflakecomputing.com") != string::npos) {
+				throw InvalidInputException(
+				    "Invalid Snowflake account format: '%s'. "
+				    "Use only the account identifier (e.g., 'MYACCOUNT-12345'), not the full hostname. "
+				    "Remove '.snowflakecomputing.com' - it causes connection timeouts.",
+				    account);
+			}
+
+			// Check for URL format
+			if (account.find("://") != string::npos || account.find("http") != string::npos) {
+				throw InvalidInputException("Invalid Snowflake account format: '%s'. "
+				                            "Account should be the identifier only, not a URL.",
+				                            account);
+			}
+
+			// Check for multiple dots (likely full hostname)
+			size_t dot_count = 0;
+			for (char c : account) {
+				if (c == '.')
+					dot_count++;
+			}
+			if (dot_count > 1) {
+				throw InvalidInputException(
+				    "Invalid Snowflake account format: '%s'. "
+				    "Use hyphen format (e.g., 'ORGNAME-ACCOUNTNAME'), not dot-separated hostname.",
+				    account);
+			}
+		}
 	}
 
 	// Process optional fields

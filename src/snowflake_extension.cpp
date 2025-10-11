@@ -2,7 +2,6 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "snowflake_extension.hpp"
-// #include "snowflake_attach.hpp"
 #include "storage/snowflake_storage.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"

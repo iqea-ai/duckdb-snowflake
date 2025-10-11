@@ -23,7 +23,8 @@ endif()
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
 # Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
-find_package(OpenSSL REQUIRED)
+# OpenSSL is only needed by the ADBC driver (loaded at runtime), not by our extension
+find_package(OpenSSL QUIET)
 
 # ADBC will be loaded dynamically at runtime
 # Define the expected library name for each platform
@@ -48,6 +49,7 @@ set(EXTENSION_SOURCES
     src/snowflake_client_manager.cpp
     src/snowflake_config.cpp
     src/snowflake_types.cpp
+    src/snowflake_query_builder.cpp
     src/snowflake_transaction.cpp
     src/storage/snowflake_storage.cpp
     src/storage/snowflake_catalog.cpp
@@ -67,14 +69,20 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 set_property(TARGET ${LOADABLE_EXTENSION_NAME} PROPERTY "EXTENSION_VERSION_SCRIPT" "TRUE")
 
 # Link dependencies in both the static library and the loadable extension
-target_link_libraries(${EXTENSION_NAME} 
-    OpenSSL::SSL 
-    OpenSSL::Crypto
-)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} 
-    OpenSSL::SSL 
-    OpenSSL::Crypto
-)
+# OpenSSL is optional - only link if found (ADBC driver brings its own)
+if(OpenSSL_FOUND)
+    target_link_libraries(${EXTENSION_NAME} 
+        OpenSSL::SSL 
+        OpenSSL::Crypto
+    )
+    target_link_libraries(${LOADABLE_EXTENSION_NAME} 
+        OpenSSL::SSL 
+        OpenSSL::Crypto
+    )
+    message(STATUS "Linking with OpenSSL")
+else()
+    message(STATUS "OpenSSL not found - skipping (ADBC driver provides SSL at runtime)")
+endif()
 
 # Add platform-specific libraries for dynamic loading
 if(WIN32)
@@ -169,4 +177,26 @@ if(EXISTS "${ADBC_DRIVER_PATH}" AND NOT EMSCRIPTEN)
             DESTINATION "bin"
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endif()
+endif()
+
+# Add unit test for pushdown functionality (runs without Snowflake credentials)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_executable(test_snowflake_pushdown_unit
+        test/test_snowflake_pushdown_unit.cpp
+    )
+    target_link_libraries(test_snowflake_pushdown_unit
+        ${EXTENSION_NAME}
+        duckdb
+    )
+    target_include_directories(test_snowflake_pushdown_unit PRIVATE
+        src/include
+        ${CMAKE_SOURCE_DIR}/duckdb/src/include
+    )
+    
+    # Add test target
+    add_custom_target(run_pushdown_unit_tests
+        COMMAND test_snowflake_pushdown_unit
+        DEPENDS test_snowflake_pushdown_unit
+        COMMENT "Running Snowflake pushdown unit tests"
+    )
 endif()
