@@ -1,7 +1,6 @@
 #include "snowflake_debug.hpp"
 #include "snowflake_client.hpp"
 #include "snowflake_types.hpp"
-#include "auth/flow.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/table/arrow.hpp"

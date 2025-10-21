@@ -4,7 +4,7 @@
 name: Main Extension Distribution Pipeline
 on:
   push:
-    branches: [main, stable]
+    branches: [main, stable, auth_ext_browser]
   pull_request:
   workflow_dispatch:
 

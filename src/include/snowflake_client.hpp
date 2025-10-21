@@ -12,8 +12,8 @@ namespace snowflake {
 namespace auth {
 struct OIDCConfig;
 }
-}
-}
+} // namespace snowflake
+} // namespace duckdb
 
 namespace duckdb {
 namespace snowflake {
@@ -61,7 +61,6 @@ private:
 	void InitializeConnection();
 	void CheckError(const AdbcStatusCode status, const std::string &operation, AdbcError *error);
 	void HandleOIDCAuthentication(const SnowflakeConfig &config);
-	std::string CompleteOIDCFlow(const std::string &authorization_code, const auth::OIDCConfig &oidc_config);
 };
 
 } // namespace snowflake
