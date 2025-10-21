@@ -67,8 +67,8 @@ static void LoadInternal(DuckDB &db) {
 #endif
 }
 
-void SnowflakeExtension::Load(DuckDB &db) {
-	LoadInternal(db);
+void SnowflakeExtension::Load(ExtensionLoader &loader) {
+	LoadInternal(loader.GetDatabase());
 }
 std::string SnowflakeExtension::Name() {
 	return "snowflake";
