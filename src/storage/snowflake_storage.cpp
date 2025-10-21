@@ -29,8 +29,7 @@ static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, C
 
 		try {
 			config = SnowflakeSecretsHelper::GetCredentials(context, secret_name);
-			DPRINT("Retrieved config from secret - Database: %s, Auth Type: %s\n", 
-			       config.database.c_str(), 
+			DPRINT("Retrieved config from secret - Database: %s, Auth Type: %s\n", config.database.c_str(),
 			       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
 		} catch (const std::exception &e) {
 			throw InvalidInputException("Failed to retrieve Snowflake credentials from secret '%s': %s",
@@ -40,13 +39,13 @@ static unique_ptr<Catalog> SnowflakeAttach(StorageExtensionInfo *storage_info, C
 		// Fall back to connection string parsing (LEGACY METHOD)
 		DPRINT("Using connection string from path (LEGACY METHOD)\n");
 		config = SnowflakeConfig::ParseConnectionString(info.path);
-		DPRINT("Parsed config - Database: %s, Auth Type: %s\n", 
-		       config.database.c_str(),
+		DPRINT("Parsed config - Database: %s, Auth Type: %s\n", config.database.c_str(),
 		       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
 	} else {
-		throw InvalidInputException("Snowflake ATTACH requires either a SECRET option (PREFERRED) or connection string (LEGACY). "
-		                            "Usage: ATTACH '' AS name (TYPE snowflake, SECRET secret_name) "
-		                            "or ATTACH 'connection_string' AS name (TYPE snowflake)");
+		throw InvalidInputException(
+		    "Snowflake ATTACH requires either a SECRET option (PREFERRED) or connection string (LEGACY). "
+		    "Usage: ATTACH '' AS name (TYPE snowflake, SECRET secret_name) "
+		    "or ATTACH 'connection_string' AS name (TYPE snowflake)");
 	}
 
 	// Snowflake extension only supports read-only access
