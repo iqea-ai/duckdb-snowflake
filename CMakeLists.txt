@@ -53,8 +53,6 @@ set(EXTENSION_SOURCES
     src/snowflake_config.cpp
     src/snowflake_types.cpp
     src/snowflake_transaction.cpp
-    src/auth/pkce.cpp
-    src/auth/flow.cpp
     src/storage/snowflake_storage.cpp
     src/storage/snowflake_catalog.cpp
     src/storage/snowflake_catalog_set.cpp
