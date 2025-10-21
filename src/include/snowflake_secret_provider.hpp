@@ -24,7 +24,7 @@ public:
 	string GetDatabase() const;
 	string GetSchema() const;
 	string GetRole() const;
-	
+
 	//! Get OIDC-specific fields
 	string GetOIDCToken() const;
 	string GetOIDCClientId() const;

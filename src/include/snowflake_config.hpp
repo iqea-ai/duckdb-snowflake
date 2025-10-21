@@ -21,13 +21,13 @@ struct SnowflakeConfig {
 	std::string oidc_token;
 	std::string token_file_path;
 	std::string workload_identity_provider;
-	
+
 	// OIDC configuration
 	std::string oidc_client_id;
 	std::string oidc_issuer_url;
 	std::string oidc_redirect_uri;
 	std::string oidc_scope = "openid";
-	
+
 	int32_t query_timeout = 300; // seconds
 	bool keep_alive = true;
 	bool use_high_precision = true; // When false, DECIMAL(p,0) converts to INT64
