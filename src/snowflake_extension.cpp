@@ -89,8 +89,8 @@ DUCKDB_EXTENSION_API const char *snowflake_version() {
 #ifdef DUCKDB_BUILD_LOADABLE_EXTENSION
 extern "C" {
 DUCKDB_EXTENSION_API void snowflake_loadable_init(duckdb::DatabaseInstance &db) {
-	duckdb::DuckDB duckdb_instance(db);
-	duckdb::LoadInternal(duckdb_instance);
+	duckdb::ExtensionLoader loader(db, "snowflake");
+	duckdb::LoadInternal(loader);
 }
 }
 #endif
