@@ -77,8 +77,8 @@ std::string SnowflakeExtension::Version() const {
 extern "C" {
 
 DUCKDB_EXTENSION_API void snowflake_init(duckdb::DatabaseInstance &db) {
-	duckdb::DuckDB duckdb_instance(db);
-	duckdb::LoadInternal(duckdb_instance);
+	duckdb::ExtensionLoader loader(db, "snowflake");
+	duckdb::LoadInternal(loader);
 }
 
 DUCKDB_EXTENSION_API const char *snowflake_version() {
