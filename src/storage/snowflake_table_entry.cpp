@@ -24,7 +24,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	auto connection = client_manager.GetConnection(config);
 
 	auto factory = make_uniq<SnowflakeArrowStreamFactory>(connection, query);
-	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
+	DPRINT("SnowflakeTableEntry: Created factory at %p\n", static_cast<void *>(factory.get()));
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
 	// TODO remove below line after implementing projection pushdown

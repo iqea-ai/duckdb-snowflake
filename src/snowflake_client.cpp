@@ -35,7 +35,7 @@ static bool FileExists(const std::string &path) {
 // Get the directory where the current extension is located
 static std::string GetExtensionDirectory() {
 #ifdef _WIN32
-	HMODULE hModule = NULL;
+	HMODULE hModule = nullptr;
 	// Get handle to the module containing this function
 	if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 	                      reinterpret_cast<LPCTSTR>(&GetExtensionDirectory), &hModule)) {
@@ -531,7 +531,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 		stream.release(&stream);
 	}
 
-	DPRINT("Releasing statement at %p\n", (void *)&statement);
+	DPRINT("Releasing statement at %p\n", static_cast<void *>(&statement));
 	CheckError(AdbcStatementRelease(&statement, &error), "Failed to release AdbcStatement", &error);
 
 	return results;
