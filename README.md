@@ -284,85 +284,209 @@ CREATE SECRET ...
 DROP SECRET my_snowflake_secret;
 ```
 
-## OIDC Authentication
+## Authentication Methods
 
-The DuckDB Snowflake extension supports OpenID Connect (OIDC) authentication with DuckDB secrets as the default and recommended method. OIDC provides enhanced security through JWT tokens and eliminates the need for password management.
+The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and workflow.
 
-### OIDC Authentication Methods
+### 1. Password Authentication
 
-#### Pre-obtained Token (Recommended for Production)
-
-Use this method when you already have a valid JWT access token from your OIDC provider:
+The simplest method using username and password:
 
 ```sql
--- Create secret with existing OIDC token
-CREATE SECRET snowflake_oidc (
+CREATE SECRET my_snowflake (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    PASSWORD 'YOUR_PASSWORD',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE'
+);
+
+-- Query directly
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_snowflake');
+```
+
+### 2. SSO/OIDC Browser Authentication
+
+For organizations using Okta, Auth0, or other SSO providers. The browser will open for authentication:
+
+```sql
+CREATE SECRET my_sso (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_EMAIL',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    AUTH_TYPE 'OIDC'
+);
+
+-- Browser will open for SSO login
+ATTACH '' AS sf (TYPE snowflake, SECRET my_sso);
+SELECT CURRENT_USER();
+```
+
+**Prerequisites for SSO:**
+- Snowflake administrator must configure EXTERNAL_OAUTH security integration
+- Your identity provider (Okta/Auth0) must be linked to Snowflake
+
+#### Configuring SSO/OIDC Authentication
+
+**Step 1: Snowflake Configuration (Administrator)**
+
+A Snowflake administrator must create an EXTERNAL_OAUTH security integration:
+
+```sql
+-- Run this in Snowflake as ACCOUNTADMIN
+CREATE SECURITY INTEGRATION okta_integration
+  TYPE = EXTERNAL_OAUTH
+  ENABLED = TRUE
+  EXTERNAL_OAUTH_TYPE = OKTA
+  EXTERNAL_OAUTH_ISSUER = 'https://yourcompany.okta.com/oauth2/default'
+  EXTERNAL_OAUTH_JWS_KEYS_URL = 'https://yourcompany.okta.com/oauth2/default/v1/keys'
+  EXTERNAL_OAUTH_AUDIENCE_LIST = ('https://yourcompany.snowflakecomputing.com')
+  EXTERNAL_OAUTH_TOKEN_USER_MAPPING_CLAIM = 'sub'
+  EXTERNAL_OAUTH_SNOWFLAKE_USER_MAPPING_ATTRIBUTE = 'LOGIN_NAME'
+  EXTERNAL_OAUTH_SCOPE_DELIMITER = ' ';
+```
+
+**Customize these values:**
+- `EXTERNAL_OAUTH_ISSUER`: Your Okta authorization server URL
+- `EXTERNAL_OAUTH_JWS_KEYS_URL`: Your Okta public keys endpoint
+- `EXTERNAL_OAUTH_AUDIENCE_LIST`: Your Snowflake account URL
+
+**For Auth0:**
+```sql
+CREATE SECURITY INTEGRATION auth0_integration
+  TYPE = EXTERNAL_OAUTH
+  ENABLED = TRUE
+  EXTERNAL_OAUTH_TYPE = CUSTOM
+  EXTERNAL_OAUTH_ISSUER = 'https://yourcompany.auth0.com/'
+  EXTERNAL_OAUTH_JWS_KEYS_URL = 'https://yourcompany.auth0.com/.well-known/jwks.json'
+  EXTERNAL_OAUTH_AUDIENCE_LIST = ('https://yourcompany.snowflakecomputing.com')
+  EXTERNAL_OAUTH_TOKEN_USER_MAPPING_CLAIM = 'sub'
+  EXTERNAL_OAUTH_SNOWFLAKE_USER_MAPPING_ATTRIBUTE = 'LOGIN_NAME'
+  EXTERNAL_OAUTH_SCOPE_DELIMITER = ' ';
+```
+
+**Step 2: Okta Configuration (Administrator)**
+
+In your Okta admin console:
+
+1. **Create a new OAuth 2.0 Application**
+   - Application type: Web Application
+   - Grant types: Authorization Code
+
+2. **Configure Redirect URIs**
+   - Add your Snowflake callback URLs
+   - Format: `https://<account>.snowflakecomputing.com/oauth/complete`
+
+3. **Configure Scopes**
+   - Enable: `openid`, `profile`, `email`
+
+4. **Note the Client ID**
+   - Save for reference (not needed in DuckDB extension code)
+
+**Step 3: Test SSO Authentication**
+
+```sql
+-- Load the extension
+LOAD snowflake;
+
+-- Create secret with SSO
+CREATE SECRET test_sso (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_EMAIL@company.com',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    AUTH_TYPE 'OIDC'
+);
+
+-- Browser will open for SSO login
+ATTACH '' AS sf (TYPE snowflake, SECRET test_sso);
+
+-- Test the connection
+SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
+```
+
+### 3. Key Pair (JWT) Authentication
+
+Secure authentication using RSA key pairs, ideal for service accounts:
+
+```sql
+CREATE SECRET my_keypair (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    PRIVATE_KEY 'YOUR_PRIVATE_KEY_PEM_STRING'
+);
+
+-- Or use a file path
+CREATE SECRET my_keypair_file (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    PRIVATE_KEY_FILE '/path/to/rsa_key.p8'
+);
+
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_keypair');
+```
+
+**Setup:**
+1. Generate RSA key pair: `openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -nocrypt`
+2. Extract public key: `openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub`
+3. Register public key in Snowflake: `ALTER USER username SET RSA_PUBLIC_KEY='...'`
+
+### 4. OAuth Token Authentication
+
+Use pre-obtained OAuth tokens:
+
+```sql
+CREATE SECRET my_oauth (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    ROLE 'YOUR_ROLE',
-    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
+    TOKEN 'YOUR_OAUTH_ACCESS_TOKEN'
 );
 
--- Use immediately
-ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_oidc, ACCESS_MODE READ_ONLY);
-SELECT * FROM sf.YOUR_SCHEMA.YOUR_TABLE LIMIT 10;
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_oauth');
 ```
 
-#### Interactive OIDC Flow
+### 5. Workload Identity Authentication
 
-Use this method to trigger an interactive OIDC authentication flow:
+For cloud-based deployments with workload identity federation:
 
 ```sql
--- Create secret with OIDC configuration
-CREATE SECRET snowflake_oidc_interactive (
+CREATE SECRET my_workload (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    ROLE 'YOUR_ROLE',
-    OIDC_CLIENT_ID 'YOUR_OKTA_CLIENT_ID',
-    OIDC_ISSUER_URL 'https://YOUR_OKTA_DOMAIN.okta.com/oauth2/YOUR_AUTH_SERVER_ID',
-    OIDC_REDIRECT_URI 'http://localhost:8080/callback',
-    OIDC_SCOPE 'openid profile email'
+    AUTH_TYPE 'WORKLOAD_IDENTITY',
+    TOKEN_FILE_PATH '/path/to/token/file'
 );
 
--- This will trigger interactive OIDC flow
-ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_oidc_interactive, ACCESS_MODE READ_ONLY);
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_workload');
 ```
 
-### OIDC Configuration Parameters
+### Common Secret Parameters
 
-**Required Parameters:**
-- `ACCOUNT` - Your Snowflake account identifier
+**Required:**
+- `TYPE` - Must be 'snowflake'
+- `ACCOUNT` - Your Snowflake account identifier (e.g., 'xy12345.us-east-1')
 - `DATABASE` - Target database name
 
-**Optional Parameters:**
+**Optional:**
 - `WAREHOUSE` - Snowflake warehouse name
-- `ROLE` - Snowflake role name
+- `ROLE` - Snowflake role to use
 - `SCHEMA` - Default schema name
 
-**OIDC Authentication Parameters:**
-- `OIDC_TOKEN` - Pre-obtained JWT access token (recommended for production)
-- `OIDC_CLIENT_ID` - OIDC client ID for interactive flow
-- `OIDC_ISSUER_URL` - OIDC issuer URL (e.g., Okta authorization server)
-- `OIDC_REDIRECT_URI` - OAuth redirect URI
-- `OIDC_SCOPE` - OAuth scopes (default: "openid")
-
-### OIDC Security Features
-
-- **PKCE (Proof Key for Code Exchange)** - Prevents authorization code interception attacks
-- **State Parameter Validation** - Protects against CSRF attacks
-- **Encrypted Credential Storage** - OIDC tokens stored securely in DuckDB secrets
-- **JWT Token Validation** - Automatic token validation and username extraction
-- **Cross-Platform Browser Support** - Automatic browser launch for interactive flows
-
-### OIDC Provider Support
-
-The extension works with any OIDC-compliant provider including Okta, Auth0, Azure AD, Google Identity, and custom OIDC providers.
-
-### OIDC Best Practices
+### Security Best Practices
 
 **Use Descriptive Secret Names:**
 ```sql
@@ -397,6 +521,119 @@ CREATE SECRET snowflake_readonly (
     OIDC_TOKEN 'READONLY_TOKEN_HERE'
 );
 ```
+
+## Testing Authentication
+
+### Test Password Authentication
+
+```sql
+-- Load extension
+LOAD snowflake;
+
+-- Create secret
+CREATE SECRET test_password (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    PASSWORD 'YOUR_PASSWORD',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE'
+);
+
+-- Test with simple query
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_password');
+
+-- Expected result: Your username
+```
+
+### Test SSO/OIDC Authentication
+
+```sql
+-- Load extension
+LOAD snowflake;
+
+-- Create secret
+CREATE SECRET test_sso (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_EMAIL@company.com',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    AUTH_TYPE 'OIDC'
+);
+
+-- Browser will open for authentication
+ATTACH '' AS sf (TYPE snowflake, SECRET test_sso);
+
+-- Test the connection
+SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
+
+-- Expected result: Your user, role, and database
+```
+
+### Test Key Pair Authentication
+
+```sql
+-- Load extension
+LOAD snowflake;
+
+-- Create secret with private key file
+CREATE SECRET test_keypair (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    PRIVATE_KEY_FILE '/path/to/rsa_key.p8'
+);
+
+-- Test the connection
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_keypair');
+
+-- Expected result: Your username
+```
+
+### Test OAuth Token Authentication
+
+```sql
+-- Load extension
+LOAD snowflake;
+
+-- Create secret with OAuth token
+CREATE SECRET test_oauth (
+    TYPE snowflake,
+    ACCOUNT 'YOUR_ACCOUNT',
+    DATABASE 'YOUR_DATABASE',
+    WAREHOUSE 'YOUR_WAREHOUSE',
+    TOKEN 'YOUR_OAUTH_ACCESS_TOKEN'
+);
+
+-- Test the connection
+SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_oauth');
+
+-- Expected result: Your username
+```
+
+### Troubleshooting Authentication
+
+**Connection fails:**
+```sql
+-- Check if secret exists
+SELECT * FROM duckdb_secrets() WHERE name = 'your_secret_name';
+
+-- Verify ADBC driver is loaded
+SELECT * FROM duckdb_extensions() WHERE extension_name = 'snowflake';
+```
+
+**SSO browser doesn't open:**
+- Ensure Snowflake EXTERNAL_OAUTH is configured
+- Verify your user email matches Snowflake username
+- Check default browser settings
+
+**Key pair fails:**
+- Verify public key is registered in Snowflake
+- Ensure private key is in PKCS#8 format
+- Check file path and permissions
 
 ## Functions Reference
 

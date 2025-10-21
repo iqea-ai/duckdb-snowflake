@@ -72,14 +72,14 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.warehouse = snowflake_secret->GetWarehouse();
 		config.database = snowflake_secret->GetDatabase();
 		config.role = snowflake_secret->GetRole();
-		
+
 		// Extract OIDC parameters
 		config.oidc_token = snowflake_secret->GetOIDCToken();
 		config.oidc_client_id = snowflake_secret->GetOIDCClientId();
 		config.oidc_issuer_url = snowflake_secret->GetOIDCIssuerUrl();
 		config.oidc_redirect_uri = snowflake_secret->GetOIDCRedirectUri();
 		config.oidc_scope = snowflake_secret->GetOIDCScope();
-		
+
 		// Determine authentication type based on what's available
 		if (!config.oidc_token.empty() || !config.oidc_client_id.empty()) {
 			config.auth_type = snowflake::SnowflakeAuthType::OIDC;
