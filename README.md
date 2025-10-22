@@ -33,20 +33,20 @@ SELECT * FROM snowflake_scan(
 );
 ```
 
-#### OIDC Authentication (Recommended)
+#### SSO/OIDC Authentication (Recommended)
 ```sql
--- 1. Create a Snowflake profile with OIDC authentication
-CREATE SECRET my_snowflake_oidc (
+-- 1. Create a Snowflake profile with SSO authentication
+CREATE SECRET my_snowflake_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_EMAIL@company.com',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    ROLE 'YOUR_ROLE',
-    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
+    AUTH_TYPE 'OIDC'
 );
 
--- 2. Attach and query using OIDC
-ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_oidc, ACCESS_MODE READ_ONLY);
+-- 2. Browser will open for SSO login, then query
+ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_sso);
 SELECT * FROM snow_db.schema.customers WHERE state = 'CA';
 ```
 
@@ -70,9 +70,9 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 - **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Multiple Authentication Methods**: Password-based, OAuth, Key Pair, Workload Identity, and OIDC authentication
-- **OIDC Support**: Full OpenID Connect authentication with PKCE security and DuckDB secrets integration
-- **Secret Management**: Secure credential storage using DuckDB's secrets system (recommended for OIDC)
+- **Authentication Methods**: Password-based and SSO/OIDC (external browser) authentication
+- **SSO Support**: Full support for Okta, Auth0, and other SSO providers via external browser authentication
+- **Secret Management**: Secure credential storage using DuckDB's secrets system
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
 ## Installation
@@ -409,70 +409,13 @@ ATTACH '' AS sf (TYPE snowflake, SECRET test_sso);
 SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
 ```
 
-### 3. Key Pair (JWT) Authentication
+### Supported Authentication Methods
 
-Secure authentication using RSA key pairs, ideal for service accounts:
+Currently supported authentication methods:
+- **Password Authentication** - Username and password
+- **SSO/OIDC Browser Authentication** - External browser with Okta/Auth0
 
-```sql
-CREATE SECRET my_keypair (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_USERNAME',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    PRIVATE_KEY 'YOUR_PRIVATE_KEY_PEM_STRING'
-);
-
--- Or use a file path
-CREATE SECRET my_keypair_file (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_USERNAME',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    PRIVATE_KEY_FILE '/path/to/rsa_key.p8'
-);
-
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_keypair');
-```
-
-**Setup:**
-1. Generate RSA key pair: `openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -nocrypt`
-2. Extract public key: `openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub`
-3. Register public key in Snowflake: `ALTER USER username SET RSA_PUBLIC_KEY='...'`
-
-### 4. OAuth Token Authentication
-
-Use pre-obtained OAuth tokens:
-
-```sql
-CREATE SECRET my_oauth (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    TOKEN 'YOUR_OAUTH_ACCESS_TOKEN'
-);
-
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_oauth');
-```
-
-### 5. Workload Identity Authentication
-
-For cloud-based deployments with workload identity federation:
-
-```sql
-CREATE SECRET my_workload (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    AUTH_TYPE 'WORKLOAD_IDENTITY',
-    TOKEN_FILE_PATH '/path/to/token/file'
-);
-
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_workload');
-```
+**Note:** Key Pair (JWT), OAuth Token, and Workload Identity authentication methods are not currently supported but may be added in future releases.
 
 ### Common Secret Parameters
 
@@ -571,49 +514,6 @@ SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
 -- Expected result: Your user, role, and database
 ```
 
-### Test Key Pair Authentication
-
-```sql
--- Load extension
-LOAD snowflake;
-
--- Create secret with private key file
-CREATE SECRET test_keypair (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_USERNAME',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    PRIVATE_KEY_FILE '/path/to/rsa_key.p8'
-);
-
--- Test the connection
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_keypair');
-
--- Expected result: Your username
-```
-
-### Test OAuth Token Authentication
-
-```sql
--- Load extension
-LOAD snowflake;
-
--- Create secret with OAuth token
-CREATE SECRET test_oauth (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    TOKEN 'YOUR_OAUTH_ACCESS_TOKEN'
-);
-
--- Test the connection
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_oauth');
-
--- Expected result: Your username
-```
-
 ### Troubleshooting Authentication
 
 **Connection fails:**
@@ -630,10 +530,10 @@ SELECT * FROM duckdb_extensions() WHERE extension_name = 'snowflake';
 - Verify your user email matches Snowflake username
 - Check default browser settings
 
-**Key pair fails:**
-- Verify public key is registered in Snowflake
-- Ensure private key is in PKCS#8 format
-- Check file path and permissions
+**Password authentication fails:**
+- Verify username and password are correct
+- Check account identifier format
+- Ensure user has necessary permissions in Snowflake
 
 ## Functions Reference
 

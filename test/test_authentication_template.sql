@@ -1,0 +1,62 @@
+-- Authentication Test Template for DuckDB Snowflake Extension
+-- This file demonstrates how to test both supported authentication methods
+
+-- Load the extension
+LOAD 'build/debug/extension/snowflake/snowflake.duckdb_extension';
+
+-- ============================================================================
+-- Method 1: Password Authentication
+-- ============================================================================
+-- Use this for username/password authentication
+--
+-- CREATE OR REPLACE SECRET snowflake_password (
+--     TYPE SNOWFLAKE,
+--     ACCOUNT 'YOUR_ACCOUNT',          -- e.g., 'abc123' or 'abc123.us-east-1'
+--     DATABASE 'YOUR_DATABASE',        -- e.g., 'SNOWFLAKE_SAMPLE_DATA'
+--     USER 'YOUR_USERNAME',            -- Your Snowflake username
+--     PASSWORD 'YOUR_PASSWORD'         -- Your Snowflake password
+-- );
+--
+-- -- Test connection
+-- ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_password);
+--
+-- -- Verify connection
+-- SELECT current_user() as user;
+-- SELECT database_name FROM sf.information_schema.databases LIMIT 5;
+--
+-- -- Cleanup
+-- DETACH sf;
+
+-- ============================================================================
+-- Method 2: SSO/OIDC Authentication (External Browser)
+-- ============================================================================
+-- Use this for SSO with external identity providers (Okta, Auth0, Azure AD)
+-- Requires Snowflake EXTERNAL_OAUTH security integration to be configured
+--
+-- CREATE OR REPLACE SECRET snowflake_sso (
+--     TYPE SNOWFLAKE,
+--     ACCOUNT 'YOUR_ACCOUNT',              -- e.g., 'abc123' or 'abc123.us-east-1'
+--     DATABASE 'YOUR_DATABASE',            -- e.g., 'SNOWFLAKE_SAMPLE_DATA'
+--     USER 'YOUR_USERNAME',                -- Your Snowflake username
+--     OIDC_CLIENT_ID 'external_browser'   -- Triggers external browser SSO flow
+-- );
+--
+-- -- Test connection (browser will open)
+-- ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_sso);
+--
+-- -- Verify connection
+-- SELECT current_user() as user;
+-- SELECT database_name FROM sf.information_schema.databases LIMIT 5;
+--
+-- -- Cleanup
+-- DETACH sf;
+
+-- ============================================================================
+-- Notes:
+-- ============================================================================
+-- 1. Uncomment the method you want to test
+-- 2. Replace placeholder values with your actual credentials
+-- 3. For SSO, ensure Snowflake EXTERNAL_OAUTH integration is configured
+-- 4. For SSO, browser must open and you must complete authentication
+-- 5. DETACH when done to close the connection
+

@@ -180,55 +180,66 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.account", config.account.c_str(), &error);
 	CheckError(status, "Failed to set account", &error);
 
-	if (!config.username.empty()) {
-		status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
-		CheckError(status, "Failed to set username", &error);
-	}
-
-	// Set authentication based on type
+	// Set authentication based on type (BEFORE setting username!)
+	// For OIDC/browser auth, we need to set authenticator FIRST
 	switch (config.auth_type) {
 	case SnowflakeAuthType::PASSWORD:
+		// For password auth, set username and password
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		if (!config.password.empty()) {
 			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
 			CheckError(status, "Failed to set password", &error);
 		}
 		break;
-	case SnowflakeAuthType::OAUTH:
-		if (!config.oauth_token.empty()) {
-			status =
-			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
-			CheckError(status, "Failed to set OAuth token", &error);
-		}
-		break;
-	case SnowflakeAuthType::KEY_PAIR:
-		if (!config.private_key.empty()) {
-			status =
-			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.private_key", config.private_key.c_str(), &error);
-			CheckError(status, "Failed to set private key", &error);
-		}
-		break;
-	case SnowflakeAuthType::WORKLOAD_IDENTITY:
-		// Set authenticator to WORKLOAD_IDENTITY
-		status = AdbcDatabaseSetOption(&database, "authenticator", "WORKLOAD_IDENTITY", &error);
-		CheckError(status, "Failed to set authenticator to WORKLOAD_IDENTITY", &error);
 
-		// Set workload identity provider to OIDC
-		status = AdbcDatabaseSetOption(&database, "workload_identity_provider", "OIDC", &error);
-		CheckError(status, "Failed to set workload identity provider to OIDC", &error);
+		// OAUTH token authentication - Not currently supported
+		// case SnowflakeAuthType::OAUTH:
+		// 	if (!config.oauth_token.empty()) {
+		// 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(),
+		// &error); 		CheckError(status, "Failed to set OAuth token", &error);
+		// 	}
+		// 	break;
 
-		// Set token - prefer file path over direct token
-		if (!config.token_file_path.empty()) {
-			status = AdbcDatabaseSetOption(&database, "token_file_path", config.token_file_path.c_str(), &error);
-			CheckError(status, "Failed to set token file path", &error);
-		} else if (!config.oidc_token.empty()) {
-			status = AdbcDatabaseSetOption(&database, "token", config.oidc_token.c_str(), &error);
-			CheckError(status, "Failed to set OIDC token", &error);
-		}
-		break;
+		// Key pair (JWT) authentication - Not currently supported
+		// case SnowflakeAuthType::KEY_PAIR:
+		// 	if (!config.private_key.empty()) {
+		// 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.private_key", config.private_key.c_str(),
+		// &error); 		CheckError(status, "Failed to set private key", &error);
+		// 	}
+		// 	break;
+
+		// Workload Identity authentication - Not currently supported
+		// case SnowflakeAuthType::WORKLOAD_IDENTITY:
+		// 	// Set authenticator to WORKLOAD_IDENTITY
+		// 	status = AdbcDatabaseSetOption(&database, "authenticator", "WORKLOAD_IDENTITY", &error);
+		// 	CheckError(status, "Failed to set authenticator to WORKLOAD_IDENTITY", &error);
+		//
+		// 	// Set workload identity provider to OIDC
+		// 	status = AdbcDatabaseSetOption(&database, "workload_identity_provider", "OIDC", &error);
+		// 	CheckError(status, "Failed to set workload identity provider to OIDC", &error);
+		//
+		// 	// Set token - prefer file path over direct token
+		// 	if (!config.token_file_path.empty()) {
+		// 		status = AdbcDatabaseSetOption(&database, "token_file_path", config.token_file_path.c_str(), &error);
+		// 		CheckError(status, "Failed to set token file path", &error);
+		// 	} else if (!config.oidc_token.empty()) {
+		// 		status = AdbcDatabaseSetOption(&database, "token", config.oidc_token.c_str(), &error);
+		// 		CheckError(status, "Failed to set OIDC token", &error);
+		// 	}
+		// 	break;
+
 	case SnowflakeAuthType::OIDC:
-		// Handle OIDC authentication flow
+		// Handle OIDC authentication flow (external browser SSO)
 		HandleOIDCAuthentication(config);
 		break;
+
+	default:
+		// OAUTH, KEY_PAIR, and WORKLOAD_IDENTITY are not currently supported
+		throw std::runtime_error(
+		    "Unsupported authentication type. Only PASSWORD and OIDC (SSO) are currently supported.");
 	}
 
 	// Set optional parameters
@@ -703,20 +714,26 @@ void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
 	DPRINT("Browser will open to Snowflake login, which will redirect to Auth0/Okta\n");
 	DPRINT("Complete authentication in the browser to establish connection\n");
 
-	// Set auth_type to auth_ext_browser for external OAuth (Auth0/Okta)
-	// This tells Snowflake to use external browser authentication, which will
-	// redirect to the configured OAuth provider (Okta/Auth0) based on Snowflake's
-	// EXTERNAL_OAUTH security integration configuration
+	// Set auth_type to auth_ext_browser (per Snowflake ADBC documentation)
 	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
-	CheckError(status, "Failed to set auth type to auth_ext_browser", &error);
+	CheckError(status, "Failed to set auth_type to auth_ext_browser", &error);
 
-	// Set username if provided
+	// Set username (simple form, no adbc prefix per documentation)
 	if (!config.username.empty()) {
 		status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
 		CheckError(status, "Failed to set username", &error);
 	}
 
-	DPRINT("Snowflake will handle OAuth redirect to Auth0/Okta based on its security integration\n");
+	// Enable browser authentication timeout (120 seconds)
+	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.login_timeout", "120s", &error);
+	// Don't fail if this option doesn't exist
+
+	// Try to enable external browser explicitly
+	status =
+	    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.external_browser_timeout", "120s", &error);
+	// Don't fail if this option doesn't exist
+
+	DPRINT("auth_ext_browser set - browser will open for OAuth login\n");
 }
 
 } // namespace snowflake

@@ -88,7 +88,7 @@ DUCKDB_EXTENSION_API const char *snowflake_version() {
 // C++ extension entry point for loadable extensions
 #ifdef DUCKDB_BUILD_LOADABLE_EXTENSION
 extern "C" {
-DUCKDB_EXTENSION_API void snowflake_loadable_init(duckdb::DatabaseInstance &db) {
+DUCKDB_EXTENSION_API void snowflake_duckdb_cpp_init(duckdb::DatabaseInstance &db) {
 	duckdb::ExtensionLoader loader(db, "snowflake");
 	duckdb::LoadInternal(loader);
 }
