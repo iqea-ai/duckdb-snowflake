@@ -60,7 +60,7 @@ private:
 	void InitializeDatabase(const SnowflakeConfig &config);
 	void InitializeConnection();
 	void CheckError(const AdbcStatusCode status, const std::string &operation, AdbcError *error);
-	void HandleOIDCAuthentication(const SnowflakeConfig &config);
+	void HandleExternalOAuthAuthentication(const SnowflakeConfig &config);
 };
 
 } // namespace snowflake

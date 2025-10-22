@@ -32,6 +32,9 @@ public:
 	string GetOIDCRedirectUri() const;
 	string GetOIDCScope() const;
 
+	//! Get OAuth token (for auth_oauth with pre-obtained token)
+	string GetOAuthToken() const;
+
 	//! Validate that all required fields are present
 	void Validate() const;
 

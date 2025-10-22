@@ -103,6 +103,14 @@ string SnowflakeSecret::GetOIDCScope() const {
 	return "openid"; // Default scope
 }
 
+string SnowflakeSecret::GetOAuthToken() const {
+	Value value;
+	if (TryGetValue("oauth_token", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
 //! Validate that all required fields are present
 void SnowflakeSecret::Validate() const {
 	vector<string> required_fields = {"account", "database"};
@@ -120,14 +128,20 @@ void SnowflakeSecret::Validate() const {
 		                            StringUtil::Join(missing_fields, ", "));
 	}
 
-	// Validate authentication method - must have either password auth or OIDC auth
+	// Validate authentication method - must have password, OAuth token, or OIDC params
 	bool has_password_auth = false;
+	bool has_oauth_auth = false;
 	bool has_oidc_auth = false;
 
-	Value user_value, password_value, oidc_token_value, oidc_client_id_value, token_file_value;
+	Value user_value, password_value, oauth_token_value, oidc_token_value, oidc_client_id_value, token_file_value;
 	if (TryGetValue("user", user_value) && !user_value.IsNull() && TryGetValue("password", password_value) &&
 	    !password_value.IsNull()) {
 		has_password_auth = true;
+	}
+
+	// Check for OAuth token (pre-obtained token for custom EXTERNAL_OAUTH)
+	if (TryGetValue("oauth_token", oauth_token_value) && !oauth_token_value.IsNull()) {
+		has_oauth_auth = true;
 	}
 
 	// Check for OIDC authentication (either token or client_id for flow)
@@ -141,15 +155,27 @@ void SnowflakeSecret::Validate() const {
 		has_oidc_auth = true;
 	}
 
-	if (!has_password_auth && !has_oidc_auth) {
+	if (!has_password_auth && !has_oauth_auth && !has_oidc_auth) {
+		throw InvalidInputException("Snowflake secret requires one of: "
+		                            "1) 'user' and 'password' for password authentication, "
+		                            "2) 'oauth_token' for OAuth token authentication (custom EXTERNAL_OAUTH), "
+		                            "3) OIDC parameters ('oidc_client_id', etc.) for External OAuth with token "
+		                            "acquisition (not yet implemented)");
+	}
+
+	if (has_password_auth && has_oauth_auth) {
 		throw InvalidInputException(
-		    "Snowflake secret requires either 'user' and 'password' for password authentication, or OIDC parameters "
-		    "('oidc_token', 'oidc_client_id', or 'token_file_path') for OIDC authentication");
+		    "Snowflake secret cannot have both password and OAuth token authentication - choose one method");
 	}
 
 	if (has_password_auth && has_oidc_auth) {
 		throw InvalidInputException(
-		    "Snowflake secret cannot have both password authentication and OIDC authentication - choose one method");
+		    "Snowflake secret cannot have both password and External OAuth parameters - choose one method");
+	}
+
+	if (has_oauth_auth && has_oidc_auth) {
+		throw InvalidInputException(
+		    "Snowflake secret cannot have both oauth_token and External OAuth parameters - choose one method");
 	}
 }
 
@@ -260,14 +286,17 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
 	create_function.named_parameters["role"] = LogicalType::VARCHAR;
 
-	// OIDC authentication parameters
+	// OAuth authentication parameters
+	create_function.named_parameters["oauth_token"] = LogicalType::VARCHAR;
+
+	// OIDC authentication parameters (for token acquisition flow)
 	create_function.named_parameters["oidc_token"] = LogicalType::VARCHAR;
 	create_function.named_parameters["oidc_client_id"] = LogicalType::VARCHAR;
 	create_function.named_parameters["oidc_issuer_url"] = LogicalType::VARCHAR;
 	create_function.named_parameters["oidc_redirect_uri"] = LogicalType::VARCHAR;
 	create_function.named_parameters["oidc_scope"] = LogicalType::VARCHAR;
 
-	// Other authentication methods
+	// Other authentication methods (not currently supported)
 	create_function.named_parameters["token_file_path"] = LogicalType::VARCHAR;
 	create_function.named_parameters["workload_identity_provider"] = LogicalType::VARCHAR;
 	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;

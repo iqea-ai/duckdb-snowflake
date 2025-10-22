@@ -28,21 +28,22 @@ LOAD 'build/debug/extension/snowflake/snowflake.duckdb_extension';
 -- DETACH sf;
 
 -- ============================================================================
--- Method 2: SSO/OIDC Authentication (External Browser)
+-- Method 2: OAuth Token Authentication
 -- ============================================================================
--- Use this for SSO with external identity providers (Okta, Auth0, Azure AD)
--- Requires Snowflake EXTERNAL_OAUTH security integration to be configured
+-- Use this for custom EXTERNAL_OAUTH integrations (Auth0, custom Okta, etc.)
+-- Requires:
+--   1. Snowflake EXTERNAL_OAUTH security integration configured
+--   2. Pre-obtained OAuth access token from your identity provider
 --
--- CREATE OR REPLACE SECRET snowflake_sso (
+-- CREATE OR REPLACE SECRET snowflake_oauth (
 --     TYPE SNOWFLAKE,
---     ACCOUNT 'YOUR_ACCOUNT',              -- e.g., 'abc123' or 'abc123.us-east-1'
---     DATABASE 'YOUR_DATABASE',            -- e.g., 'SNOWFLAKE_SAMPLE_DATA'
---     USER 'YOUR_USERNAME',                -- Your Snowflake username
---     OIDC_CLIENT_ID 'external_browser'   -- Triggers external browser SSO flow
+--     ACCOUNT 'YOUR_ACCOUNT',        -- e.g., 'abc123' or 'abc123.us-east-1'
+--     DATABASE 'YOUR_DATABASE',      -- e.g., 'SNOWFLAKE_SAMPLE_DATA'
+--     OAUTH_TOKEN 'YOUR_OAUTH_TOKEN' -- OAuth access token from Auth0/Okta/etc.
 -- );
 --
--- -- Test connection (browser will open)
--- ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_sso);
+-- -- Test connection
+-- ATTACH '' AS sf (TYPE snowflake, SECRET snowflake_oauth);
 --
 -- -- Verify connection
 -- SELECT current_user() as user;
@@ -50,6 +51,31 @@ LOAD 'build/debug/extension/snowflake/snowflake.duckdb_extension';
 --
 -- -- Cleanup
 -- DETACH sf;
+
+-- ============================================================================
+-- Method 3: SSO/OIDC with Token Acquisition (NOT YET IMPLEMENTED)
+-- ============================================================================
+-- Future: Automatic OAuth token acquisition from identity provider
+-- Will support: Auth0, custom Okta, Azure AD, etc.
+-- Status: Requires implementing PKCE/OAuth flow to obtain token automatically
+--
+-- Planned usage:
+-- CREATE OR REPLACE SECRET snowflake_sso_auto (
+--     TYPE SNOWFLAKE,
+--     ACCOUNT 'YOUR_ACCOUNT',
+--     DATABASE 'YOUR_DATABASE',
+--     OIDC_CLIENT_ID 'your_client_id',
+--     OIDC_ISSUER_URL 'https://your-auth0-domain.auth0.com',
+--     OIDC_REDIRECT_URI 'http://localhost:8080/callback'
+-- );
+--
+-- This will:
+--   1. Open browser to identity provider
+--   2. User authenticates
+--   3. Token acquired automatically
+--   4. Connection established
+--
+-- Current workaround: Use Method 2 with manually obtained token
 
 -- ============================================================================
 -- Notes:

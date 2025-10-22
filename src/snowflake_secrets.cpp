@@ -73,6 +73,9 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.database = snowflake_secret->GetDatabase();
 		config.role = snowflake_secret->GetRole();
 
+		// Extract OAuth token (for pre-obtained tokens with custom EXTERNAL_OAUTH)
+		config.oauth_token = snowflake_secret->GetOAuthToken();
+
 		// Extract OIDC parameters
 		config.oidc_token = snowflake_secret->GetOIDCToken();
 		config.oidc_client_id = snowflake_secret->GetOIDCClientId();
@@ -81,9 +84,14 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.oidc_scope = snowflake_secret->GetOIDCScope();
 
 		// Determine authentication type based on what's available
-		if (!config.oidc_token.empty() || !config.oidc_client_id.empty()) {
-			config.auth_type = snowflake::SnowflakeAuthType::OIDC;
+		if (!config.oauth_token.empty()) {
+			// Pre-obtained OAuth token (for custom EXTERNAL_OAUTH integrations)
+			config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
+		} else if (!config.oidc_token.empty() || !config.oidc_client_id.empty()) {
+			// OIDC parameters provided - will trigger OAuth token acquisition flow
+			config.auth_type = snowflake::SnowflakeAuthType::EXTERNAL_OAUTH;
 		} else if (!config.username.empty() && !config.password.empty()) {
+			// Username and password provided
 			config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;
 		}
 		// Note: schema is not stored in SnowflakeConfig as per the struct definition

@@ -6,7 +6,13 @@
 namespace duckdb {
 namespace snowflake {
 
-enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR, WORKLOAD_IDENTITY, OIDC };
+enum class SnowflakeAuthType {
+	PASSWORD,          // Username and password authentication
+	OAUTH,             // OAuth token authentication (pre-obtained token)
+	KEY_PAIR,          // Key pair/JWT authentication (not supported)
+	WORKLOAD_IDENTITY, // Workload identity federation (not supported)
+	EXTERNAL_OAUTH     // External OAuth flow (Auth0, Okta, etc.) - requires token acquisition
+};
 
 struct SnowflakeConfig {
 	std::string account;

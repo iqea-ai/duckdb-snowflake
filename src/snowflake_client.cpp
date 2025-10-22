@@ -195,13 +195,19 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		}
 		break;
 
-		// OAUTH token authentication - Not currently supported
-		// case SnowflakeAuthType::OAUTH:
-		// 	if (!config.oauth_token.empty()) {
-		// 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(),
-		// &error); 		CheckError(status, "Failed to set OAuth token", &error);
-		// 	}
-		// 	break;
+	case SnowflakeAuthType::OAUTH:
+		// OAuth token authentication for custom EXTERNAL_OAUTH integrations
+		if (!config.oauth_token.empty()) {
+			// Use auth_oauth authenticator type
+			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
+			CheckError(status, "Failed to set auth_type to auth_oauth", &error);
+
+			// Provide the OAuth access token
+			status =
+			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
+			CheckError(status, "Failed to set OAuth token", &error);
+		}
+		break;
 
 		// Key pair (JWT) authentication - Not currently supported
 		// case SnowflakeAuthType::KEY_PAIR:
@@ -231,15 +237,15 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		// 	}
 		// 	break;
 
-	case SnowflakeAuthType::OIDC:
-		// Handle OIDC authentication flow (external browser SSO)
-		HandleOIDCAuthentication(config);
+	case SnowflakeAuthType::EXTERNAL_OAUTH:
+		// Handle External OAuth authentication (Auth0, custom Okta, Azure AD, etc.)
+		HandleExternalOAuthAuthentication(config);
 		break;
 
 	default:
-		// OAUTH, KEY_PAIR, and WORKLOAD_IDENTITY are not currently supported
+		// KEY_PAIR and WORKLOAD_IDENTITY are not currently supported
 		throw std::runtime_error(
-		    "Unsupported authentication type. Only PASSWORD and OIDC (SSO) are currently supported.");
+		    "Unsupported authentication type. Supported methods: PASSWORD, OAUTH (token), EXTERNAL_OAUTH (SSO).");
 	}
 
 	// Set optional parameters
@@ -704,36 +710,47 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	return result_chunk;
 }
 
-void SnowflakeClient::HandleOIDCAuthentication(const SnowflakeConfig &config) {
+void SnowflakeClient::HandleExternalOAuthAuthentication(const SnowflakeConfig &config) {
 	AdbcError error;
 	std::memset(&error, 0, sizeof(error));
 	AdbcStatusCode status;
 
-	// Use Snowflake's external browser authentication
-	DPRINT("Starting Snowflake external browser authentication (Auth0/Okta SSO)\n");
-	DPRINT("Browser will open to Snowflake login, which will redirect to Auth0/Okta\n");
-	DPRINT("Complete authentication in the browser to establish connection\n");
+	DPRINT("Starting External OAuth authentication for custom EXTERNAL_OAUTH integration\n");
 
-	// Set auth_type to auth_ext_browser (per Snowflake ADBC documentation)
-	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
-	CheckError(status, "Failed to set auth_type to auth_ext_browser", &error);
+	// TODO: Implement OAuth token acquisition flow (PKCE)
+	// For custom EXTERNAL_OAUTH integrations (Auth0, custom Okta, Azure AD, etc.),
+	// we need to:
+	// 1. Initiate OAuth/PKCE flow with the identity provider (Auth0)
+	// 2. Open browser for user to authenticate
+	// 3. Receive OAuth token via redirect callback
+	// 4. Pass token to Snowflake via auth_oauth authenticator
+	//
+	// Note: auth_ext_browser is ONLY for Snowflake-managed FED (federated auth),
+	// NOT for custom EXTERNAL_OAUTH integrations.
+	//
+	// For now, if user provides oauth_token in config, we'll use it.
+	// Otherwise, throw an error explaining the limitation.
 
-	// Set username (simple form, no adbc prefix per documentation)
-	if (!config.username.empty()) {
-		status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
-		CheckError(status, "Failed to set username", &error);
+	if (!config.oauth_token.empty()) {
+		// User provided a pre-obtained OAuth token
+		DPRINT("Using pre-obtained OAuth token\n");
+
+		// Use auth_oauth authenticator (per ADBC docs for OAuth)
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
+		CheckError(status, "Failed to set auth_type to auth_oauth", &error);
+
+		// Provide the OAuth access token
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
+		CheckError(status, "Failed to set OAuth token", &error);
+
+		DPRINT("OAuth token authentication configured\n");
+	} else {
+		// No token provided - need to implement token acquisition
+		throw std::runtime_error("External OAuth authentication requires token acquisition to be implemented. "
+		                         "For custom EXTERNAL_OAUTH integrations (Auth0, custom Okta, Azure AD), "
+		                         "the token must be obtained from the identity provider before connecting. "
+		                         "Temporary workaround: Obtain token manually and provide via OAUTH_TOKEN parameter.");
 	}
-
-	// Enable browser authentication timeout (120 seconds)
-	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.login_timeout", "120s", &error);
-	// Don't fail if this option doesn't exist
-
-	// Try to enable external browser explicitly
-	status =
-	    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.external_browser_timeout", "120s", &error);
-	// Don't fail if this option doesn't exist
-
-	DPRINT("auth_ext_browser set - browser will open for OAuth login\n");
 }
 
 } // namespace snowflake

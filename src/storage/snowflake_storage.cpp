@@ -30,7 +30,9 @@ static unique_ptr<Catalog> SnowflakeAttach(optional_ptr<StorageExtensionInfo> st
 		try {
 			config = SnowflakeSecretsHelper::GetCredentials(context, secret_name);
 			DPRINT("Retrieved config from secret - Database: %s, Auth Type: %s\n", config.database.c_str(),
-			       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
+			       config.auth_type == SnowflakeAuthType::EXTERNAL_OAUTH ? "EXTERNAL_OAUTH"
+			       : config.auth_type == SnowflakeAuthType::OAUTH        ? "OAUTH"
+			                                                             : "PASSWORD");
 		} catch (const std::exception &e) {
 			throw InvalidInputException("Failed to retrieve Snowflake credentials from secret '%s': %s",
 			                            secret_name.c_str(), e.what());
@@ -40,7 +42,9 @@ static unique_ptr<Catalog> SnowflakeAttach(optional_ptr<StorageExtensionInfo> st
 		DPRINT("Using connection string from path (LEGACY METHOD)\n");
 		config = SnowflakeConfig::ParseConnectionString(info.path);
 		DPRINT("Parsed config - Database: %s, Auth Type: %s\n", config.database.c_str(),
-		       config.auth_type == SnowflakeAuthType::OIDC ? "OIDC" : "PASSWORD");
+		       config.auth_type == SnowflakeAuthType::EXTERNAL_OAUTH ? "EXTERNAL_OAUTH"
+		       : config.auth_type == SnowflakeAuthType::OAUTH        ? "OAUTH"
+		                                                             : "PASSWORD");
 	} else {
 		throw InvalidInputException(
 		    "Snowflake ATTACH requires either a SECRET option (PREFERRED) or connection string (LEGACY). "
