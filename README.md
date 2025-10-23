@@ -253,20 +253,6 @@ CREATE SECRET my_snowflake_secret (
 );
 ```
 
-**Creating a Secret with OIDC Authentication:**
-
-```sql
--- Secret with OIDC authentication (recommended for production)
-CREATE SECRET my_snowflake_oidc (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    DATABASE 'YOUR_DATABASE',
-    WAREHOUSE 'YOUR_WAREHOUSE',
-    ROLE 'YOUR_ROLE',
-    OIDC_TOKEN 'YOUR_JWT_ACCESS_TOKEN_HERE'
-);
-```
-
 **Listing Secrets:**
 
 ```sql
