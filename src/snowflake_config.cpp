@@ -42,11 +42,21 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 				config.auth_type = SnowflakeAuthType::OAUTH;
 			} else if (value == "key_pair") {
 				config.auth_type = SnowflakeAuthType::KEY_PAIR;
+			} else if (value == "ext_browser" || value == "externalbrowser") {
+				config.auth_type = SnowflakeAuthType::EXT_BROWSER;
+			} else if (value == "okta") {
+				config.auth_type = SnowflakeAuthType::OKTA;
+			} else if (value == "mfa") {
+				config.auth_type = SnowflakeAuthType::MFA;
 			}
 		} else if (key == "token") {
 			config.oauth_token = value;
 		} else if (key == "private_key") {
 			config.private_key = value;
+		} else if (key == "private_key_passphrase") {
+			config.private_key_passphrase = value;
+		} else if (key == "okta_url") {
+			config.okta_url = value;
 		} else if (key == "query_timeout") {
 			config.query_timeout = std::stoi(value);
 		} else if (key == "keep_alive") {
@@ -82,6 +92,18 @@ std::string SnowflakeConfig::ToString() const {
 	} else if (auth_type == SnowflakeAuthType::KEY_PAIR) {
 		oss << "auth_type=key_pair;";
 		oss << "private_key=" << private_key << ";";
+		if (!private_key_passphrase.empty()) {
+			oss << "private_key_passphrase=" << private_key_passphrase << ";";
+		}
+	} else if (auth_type == SnowflakeAuthType::EXT_BROWSER) {
+		oss << "auth_type=ext_browser;";
+	} else if (auth_type == SnowflakeAuthType::OKTA) {
+		oss << "auth_type=okta;";
+		if (!okta_url.empty()) {
+			oss << "okta_url=" << okta_url << ";";
+		}
+	} else if (auth_type == SnowflakeAuthType::MFA) {
+		oss << "auth_type=mfa;";
 	}
 	oss << "query_timeout=" << query_timeout << ";";
 	oss << "keep_alive=" << (keep_alive ? "true" : "false") << ";";
@@ -93,6 +115,7 @@ bool SnowflakeConfig::operator==(const SnowflakeConfig &other) const {
 	return (account == other.account && username == other.username && password == other.password &&
 	        warehouse == other.warehouse && database == other.database && role == other.role &&
 	        auth_type == other.auth_type && oauth_token == other.oauth_token && private_key == other.private_key &&
+	        private_key_passphrase == other.private_key_passphrase && okta_url == other.okta_url &&
 	        query_timeout == other.query_timeout && keep_alive == other.keep_alive);
 }
 

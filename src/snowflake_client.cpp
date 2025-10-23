@@ -188,12 +188,15 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	// Set authentication based on type
 	switch (config.auth_type) {
 	case SnowflakeAuthType::PASSWORD:
+		// Default auth type, no need to set adbc.snowflake.sql.auth_type
 		if (!config.password.empty()) {
 			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
 			CheckError(status, "Failed to set password", &error);
 		}
 		break;
 	case SnowflakeAuthType::OAUTH:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
+		CheckError(status, "Failed to set OAuth auth type", &error);
 		if (!config.oauth_token.empty()) {
 			status =
 			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
@@ -201,10 +204,38 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		}
 		break;
 	case SnowflakeAuthType::KEY_PAIR:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_jwt", &error);
+		CheckError(status, "Failed to set key-pair auth type", &error);
 		if (!config.private_key.empty()) {
 			status =
 			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.private_key", config.private_key.c_str(), &error);
 			CheckError(status, "Failed to set private key", &error);
+		}
+		if (!config.private_key_passphrase.empty()) {
+			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_password",
+			                               config.private_key_passphrase.c_str(), &error);
+			CheckError(status, "Failed to set private key passphrase", &error);
+		}
+		break;
+	case SnowflakeAuthType::EXT_BROWSER:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
+		CheckError(status, "Failed to set external browser auth type", &error);
+		break;
+	case SnowflakeAuthType::OKTA:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_okta", &error);
+		CheckError(status, "Failed to set Okta auth type", &error);
+		if (!config.okta_url.empty()) {
+			status =
+			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_okta_url", config.okta_url.c_str(), &error);
+			CheckError(status, "Failed to set Okta URL", &error);
+		}
+		break;
+	case SnowflakeAuthType::MFA:
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_mfa", &error);
+		CheckError(status, "Failed to set MFA auth type", &error);
+		if (!config.password.empty()) {
+			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
+			CheckError(status, "Failed to set password for MFA", &error);
 		}
 		break;
 	}

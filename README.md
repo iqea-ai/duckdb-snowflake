@@ -57,7 +57,8 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 - **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Secure Authentication**: Password-based authentication with secure credential storage
+- **Multiple Authentication Methods**: Support for password, OAuth, key-pair (with passphrase support), external browser SSO, Okta, and MFA authentication
+- **Secure Authentication**: Encrypted private key support (PKCS#8) with passphrase protection
 - **Secret Management**: Secure credential storage using DuckDB's secrets system
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
@@ -195,19 +196,225 @@ SELECT snowflake_version();
 -- Should return: "Snowflake Extension v0.1.0"
 ```
 
-### Troubleshooting
-
-**If you get "ADBC driver not supported" error:**
-- Verify the driver file is in the correct location
-- Check file permissions (should be executable)
-- Ensure you downloaded the correct architecture for your platform
-
-**If you get "Driver not found" debug messages:**
-- The extension will search multiple locations automatically
-- Check the debug output to see which paths it's checking
-- Place the driver in one of the searched locations
-
 ## Configuration
+
+### Authentication Methods
+
+The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and infrastructure.
+
+#### Authentication Protocol Overview
+
+| Method | Protocol | Browser Required | Use Case |
+|--------|----------|------------------|----------|
+| **Password** | Username/Password | No | Development, simple setups |
+| **OAuth** | OAuth 2.0 | No | Programmatic access, APIs, automation, **recommended for Okta** |
+| **Key Pair** | RSA Key Pair | No | Production, headless servers, highest security |
+| **EXT_BROWSER** | SAML 2.0 | Yes | Interactive SSO, any SAML 2.0 IdP (Okta, AD FS) |
+| **OKTA** | Native Okta API | Yes | Okta-specific native integration |
+| **MFA** | Password + MFA | No | Enhanced password security |
+
+**Important Notes:**
+- **For Okta users**: OAuth is recommended over EXT_BROWSER/SAML for better security, flexibility, and programmatic access
+- **EXT_BROWSER uses SAML 2.0**: Works with any SAML 2.0-compliant identity provider including Okta, AD FS, Azure AD
+- **OAuth uses OAuth 2.0**: Ideal for headless environments, automation, and modern applications
+- **Browser-based methods** (EXT_BROWSER, OKTA) require interactive browser access and won't work in containerized/headless environments
+
+#### 1. Password Authentication (Default)
+
+Standard username and password authentication.
+
+```sql
+CREATE SECRET my_snowflake_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    PASSWORD 'mypassword',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;password=mypassword;database=mydb;warehouse=mywh
+```
+
+#### 2. OAuth Token Authentication
+
+Use **OAuth 2.0** tokens for authentication. **Recommended for Okta environments** and ideal for programmatic access.
+
+**Protocol**: OAuth 2.0
+
+**Advantages**:
+- No browser required (works in headless/containerized environments)
+- Supports programmatic authentication for APIs and automation
+- Better security with configurable authorization flows
+- Token-based access control with granular permissions
+- Recommended by Snowflake for Okta integration
+
+**How to obtain tokens**:
+- Configure External OAuth integration in Snowflake with your IdP (Okta, Azure AD, etc.)
+- Use your IdP's OAuth flow to obtain access tokens
+- See [Snowflake External OAuth documentation](https://docs.snowflake.com/en/user-guide/oauth-ext-overview)
+
+```sql
+CREATE SECRET my_oauth_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'oauth',
+    TOKEN 'your_oauth_access_token',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=oauth;token=your_oauth_access_token;database=mydb;warehouse=mywh
+```
+
+**Note**: The token must be a valid OAuth 2.0 access token obtained from your configured External OAuth provider.
+
+#### 3. Key Pair Authentication
+
+Use RSA key pairs for secure, password-less authentication.
+
+**Basic Key Pair (Unencrypted Private Key):**
+
+```sql
+CREATE SECRET my_keypair_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY '/path/to/rsa_key.p8',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=key_pair;private_key=/path/to/rsa_key.p8;database=mydb;warehouse=mywh
+```
+
+**Key Pair with Encrypted Private Key:**
+
+For enhanced security, use a passphrase-protected private key (PKCS#8 format).
+
+```sql
+CREATE SECRET my_secure_keypair_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY '/path/to/encrypted_rsa_key.p8',
+    PRIVATE_KEY_PASSPHRASE 'your_passphrase',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=key_pair;private_key=/path/to/encrypted_rsa_key.p8;private_key_passphrase=your_passphrase;database=mydb;warehouse=mywh
+```
+
+**Generating Key Pairs:**
+
+```bash
+# Generate private key with passphrase
+openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -passout pass:your_passphrase
+
+# Generate public key
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub -passin pass:your_passphrase
+
+# Assign public key to Snowflake user
+# In Snowflake, run:
+# ALTER USER myusername SET RSA_PUBLIC_KEY='<public_key_content>';
+```
+
+#### 4. External Browser SSO Authentication
+
+Authenticate using your web browser with **SAML 2.0** identity providers (Okta, AD FS, Azure AD, etc.). This opens a browser window for SSO login.
+
+**Protocol**: SAML 2.0 (Security Assertion Markup Language)
+
+**How it works**:
+1. Client initiates authentication
+2. Browser window opens to your IdP login page
+3. User authenticates with IdP (e.g., Okta)
+4. IdP sends SAML assertion to Snowflake
+5. Snowflake validates assertion and creates session
+
+```sql
+CREATE SECRET my_sso_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'ext_browser',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=ext_browser;database=mydb;warehouse=mywh
+```
+
+**Note:** External browser authentication is also supported with the alias `externalbrowser`:
+```
+account=myaccount;user=myusername;auth_type=externalbrowser;database=mydb;warehouse=mywh
+```
+
+**Limitations**:
+- Requires interactive browser access (not suitable for headless/containerized environments)
+- User must be present to authenticate
+- For Okta environments, consider using OAuth instead for programmatic access
+
+#### 5. Native Okta Authentication
+
+Direct authentication with Okta using a custom Okta URL.
+
+```sql
+CREATE SECRET my_okta_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'okta',
+    OKTA_URL 'https://yourcompany.okta.com',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=okta;okta_url=https://yourcompany.okta.com;database=mydb;warehouse=mywh
+```
+
+#### 6. Multi-Factor Authentication (MFA)
+
+Authenticate using username, password, and MFA token.
+
+```sql
+CREATE SECRET my_mfa_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    PASSWORD 'mypassword',
+    AUTH_TYPE 'mfa',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;password=mypassword;auth_type=mfa;database=mydb;warehouse=mywh
+```
 
 ### Setting Up Snowflake Credentials
 
@@ -218,7 +425,7 @@ Create a named profile to securely store your Snowflake credentials:
 **Creating a Secret:**
 
 ```sql
--- Secret with optional parameters
+-- Secret with optional parameters (password authentication example)
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
     ACCOUNT 'adbniqz-ct69933',
@@ -369,25 +576,17 @@ COPY (
 ```
 
 
-## Troubleshooting
+### Troubleshooting
 
-### Common Errors
+**If you get "ADBC driver not supported" error:**
+- Verify the driver file is in the correct location
+- Check file permissions (should be executable)
+- Ensure you downloaded the correct architecture for your platform
 
-**Connection Errors:**
-
-```
-Failed to initialize connection: [Snowflake] 390100 (08004): Incorrect username or password was specified.
-```
-
-**Solution**: Verify your credentials and account information.
-
-**Query Errors:**
-
-```
-Failed to get schema: [Snowflake] 090105 (22000): Cannot perform SELECT. This session does not have a current database.
-```
-
-**Solution**: Specify a database in the connection string or use fully qualified table names.
+**If you get "Driver not found" debug messages:**
+- The extension will search multiple locations automatically
+- Check the debug output to see which paths it's checking
+- Place the driver in one of the searched locations
 
 ### Debugging Tips
 
@@ -412,23 +611,12 @@ SELECT * FROM snowflake_scan(
 - **Large result sets**: Should be filtered at source for optimal performance, consider using snowflake_scan
 - ****COUNT(\*)** like column alias operations are not supported until projection pushdown is implemented
 
-## Security Best Practices
-
-1. **Use Strong Passwords**: Create complex passwords for your Snowflake accounts
-2. **Principle of Least Privilege**: Use Snowflake roles with minimal required permissions
-3. **Regular Rotation**: Update passwords and credentials regularly
-4. **Environment Separation**: Use different secrets for dev/test/prod environments
-5. **Secure Storage**: Secrets are stored encrypted in DuckDB's internal storage
 
 ## Support
 
 For issues or questions:
 
-- Check the [GitHub repository](https://github.com/your-repo/duckdb-snowflake)
-- Review Snowflake ADBC driver documentation
+- Check the [GitHub repository](https://github.com/iqea-ai/duckdb-snowflake). Raise any feature requests/issues under issues
+- Review Snowflake ADBC driver documentation (https://arrow.apache.org/adbc/main/driver/snowflake.html)
 - Ensure you have the latest version of the extension
 
-### For Developers
-
-If you want to build the extension from source or contribute to development, see [BUILD.md](BUILD.md) for detailed build instructions and development guidelines.# Trigger new workflow run
-# Test build with DuckDB 1.4.0
