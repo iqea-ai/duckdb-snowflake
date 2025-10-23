@@ -55,10 +55,9 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 ### Key Features
 
-- **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
+- **Direct Querying**: Execute SQL queries against Snowflake from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
 - **Multiple Authentication Methods**: Support for password, OAuth, key-pair (with passphrase support), external browser SSO, Okta, and MFA authentication
-- **Secure Authentication**: Encrypted private key support (PKCS#8) with passphrase protection
 - **Secret Management**: Secure credential storage using DuckDB's secrets system
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
