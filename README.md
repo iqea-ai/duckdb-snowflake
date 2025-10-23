@@ -21,7 +21,7 @@ LOAD snowflake;
 
 #### Password Authentication
 ```sql
--- 1. Create a Snowflake profile with password authentication
+-- 1. Create a Snowflake secret with password authentication
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
@@ -31,16 +31,16 @@ CREATE SECRET my_snowflake_secret (
     WAREHOUSE 'YOUR_WAREHOUSE'
 );
 
--- 2. Query Snowflake data
-SELECT * FROM snowflake_scan(
-    'SELECT * FROM customers WHERE state = ''CA''',
-    'my_snowflake_secret'
-);
+-- 2. Attach and query Snowflake data
+ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake_secret);
+
+-- Query tables (use lowercase schema and table names)
+SELECT * FROM sf.schema_name.table_name WHERE state = 'CA' LIMIT 10;
 ```
 
 #### Browser-Based SAML2 SSO Authentication (Recommended)
 ```sql
--- 1. Create a Snowflake profile with SAML2 browser authentication
+-- 1. Create a Snowflake secret with SAML2 browser authentication
 CREATE SECRET my_snowflake_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
@@ -49,12 +49,14 @@ CREATE SECRET my_snowflake_sso (
     AUTH_TYPE 'ext_browser'
 );
 
--- 2. Browser opens for SSO login (Auth0, Okta, Azure AD, etc.)
--- Query using snowflake_scan function
-SELECT * FROM snowflake_scan(
-    'SELECT * FROM customers WHERE state = ''CA''',
-    'my_snowflake_sso'
-);
+-- 2. Attach (browser opens for SSO login with Auth0, Okta, Azure AD, etc.)
+ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake_sso);
+
+-- Query tables (use lowercase schema and table names)
+SELECT * FROM sf.schema_name.table_name WHERE state = 'CA' LIMIT 10;
+
+-- Cleanup
+DETACH sf;
 ```
 
 ## Documentation
@@ -309,8 +311,9 @@ CREATE SECRET my_snowflake (
     WAREHOUSE 'YOUR_WAREHOUSE'
 );
 
--- Query directly
-SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_snowflake');
+-- Attach and query
+ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake);
+SELECT * FROM sf.schema_name.table_name LIMIT 10;
 ```
 
 ### 2. Browser-Based SAML2 SSO Authentication
@@ -326,11 +329,14 @@ CREATE SECRET my_sso (
     AUTH_TYPE 'ext_browser'
 );
 
--- Browser will open for SAML2 SSO login
-SELECT * FROM snowflake_scan(
-    'SELECT CURRENT_USER()',
-    'my_sso'
-);
+-- Attach (browser opens for SAML2 SSO login)
+ATTACH '' AS sf (TYPE snowflake, SECRET my_sso);
+
+-- Query tables (use lowercase schema and table names)
+SELECT * FROM sf.schema_name.table_name LIMIT 10;
+
+-- Cleanup
+DETACH sf;
 ```
 
 **Prerequisites for SAML2 SSO:**
