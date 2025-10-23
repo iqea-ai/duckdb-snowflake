@@ -7,11 +7,14 @@ namespace duckdb {
 namespace snowflake {
 
 enum class SnowflakeAuthType {
-	PASSWORD,          // Username and password authentication
-	OAUTH,             // OAuth token authentication (pre-obtained token)
-	KEY_PAIR,          // Key pair/JWT authentication (not supported)
-	WORKLOAD_IDENTITY, // Workload identity federation (not supported)
-	EXTERNAL_OAUTH     // External OAuth flow (Auth0, Okta, etc.) - requires token acquisition
+	PASSWORD, // Username and password authentication
+	// OAUTH,             // OAuth token authentication (pre-obtained token)
+	// KEY_PAIR,          // Key pair/JWT authentication (not supported)
+	// WORKLOAD_IDENTITY, // Workload identity federation (not supported)
+	// EXTERNAL_OAUTH,     // External OAuth flow (Auth0, Okta, etc.) - requires token acquisition
+	EXT_BROWSER // External browser authentication with SAML 2.0
+	            // OKTA,              // Okta authentication
+	            // MFA                 // Multi-factor authentication
 };
 
 struct SnowflakeConfig {
@@ -22,8 +25,10 @@ struct SnowflakeConfig {
 	SnowflakeAuthType auth_type = SnowflakeAuthType::PASSWORD;
 	std::string username;
 	std::string password;
-	std::string oauth_token;
-	std::string private_key;
+	// std::string oauth_token;
+	// std::string private_key;
+	// std::string private_key_passphrase;
+	// std::string okta_url;
 	std::string oidc_token;
 	std::string token_file_path;
 	std::string workload_identity_provider;
@@ -70,8 +75,10 @@ public:
 		HashCombine(seed, static_cast<int>(config.auth_type));
 		HashCombine(seed, config.username);
 		HashCombine(seed, config.password);
-		HashCombine(seed, config.oauth_token);
-		HashCombine(seed, config.private_key);
+		// HashCombine(seed, config.oauth_token);
+		// HashCombine(seed, config.private_key);
+		// HashCombine(seed, config.private_key_passphrase);
+		// HashCombine(seed, config.okta_url);
 		HashCombine(seed, config.oidc_token);
 		HashCombine(seed, config.token_file_path);
 		HashCombine(seed, config.workload_identity_provider);

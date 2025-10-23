@@ -74,7 +74,7 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.role = snowflake_secret->GetRole();
 
 		// Extract OAuth token (for pre-obtained tokens with custom EXTERNAL_OAUTH)
-		config.oauth_token = snowflake_secret->GetOAuthToken();
+		// config.oauth_token = snowflake_secret->GetOAuthToken();
 
 		// Extract OIDC parameters
 		config.oidc_token = snowflake_secret->GetOIDCToken();
@@ -84,13 +84,18 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.oidc_scope = snowflake_secret->GetOIDCScope();
 
 		// Determine authentication type based on what's available
-		if (!config.oauth_token.empty()) {
-			// Pre-obtained OAuth token (for custom EXTERNAL_OAUTH integrations)
-			config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
-		} else if (!config.oidc_token.empty() || !config.oidc_client_id.empty()) {
-			// OIDC parameters provided - will trigger OAuth token acquisition flow
-			config.auth_type = snowflake::SnowflakeAuthType::EXTERNAL_OAUTH;
-		} else if (!config.username.empty() && !config.password.empty()) {
+		// Check for explicit auth_type first (ext_browser, etc.)
+		Value auth_type_value;
+		if (snowflake_secret->TryGetValue("auth_type", auth_type_value) && !auth_type_value.IsNull()) {
+			auto auth_type_str = auth_type_value.ToString();
+			if (auth_type_str == "ext_browser" || auth_type_str == "externalbrowser") {
+				config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
+			} else if (auth_type_str == "password") {
+				config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;
+			}
+		}
+		// Fall back to default detection
+		else if (!config.username.empty() && !config.password.empty()) {
 			// Username and password provided
 			config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;
 		}

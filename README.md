@@ -2,6 +2,11 @@
 
 A powerful DuckDB extension that enables seamless querying of Snowflake databases using Arrow ADBC drivers. This extension provides efficient, columnar data transfer between DuckDB and Snowflake, making it ideal for analytics, ETL pipelines, and cross-database operations.
 
+## Documentation
+
+- **[SAML2_SETUP_GUIDE.md](SAML2_SETUP_GUIDE.md)** - Complete guide for browser-based SSO with Auth0, Okta, Azure AD
+- **[BUILD.md](BUILD.md)** - Developer build instructions
+
 ## Quick Start
 
 ### Installation
@@ -33,21 +38,23 @@ SELECT * FROM snowflake_scan(
 );
 ```
 
-#### SSO/OIDC Authentication (Recommended)
+#### Browser-Based SAML2 SSO Authentication (Recommended)
 ```sql
--- 1. Create a Snowflake profile with SSO authentication
+-- 1. Create a Snowflake profile with SAML2 browser authentication
 CREATE SECRET my_snowflake_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_EMAIL@company.com',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    AUTH_TYPE 'OIDC'
+    AUTH_TYPE 'ext_browser'
 );
 
--- 2. Browser will open for SSO login, then query
-ATTACH '' AS snow_db (TYPE snowflake, SECRET my_snowflake_sso);
-SELECT * FROM snow_db.schema.customers WHERE state = 'CA';
+-- 2. Browser opens for SSO login (Auth0, Okta, Azure AD, etc.)
+-- Query using snowflake_scan function
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customers WHERE state = ''CA''',
+    'my_snowflake_sso'
+);
 ```
 
 ## Documentation
@@ -70,8 +77,8 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 - **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Authentication Methods**: Password-based and SSO/OIDC (external browser) authentication
-- **SSO Support**: Full support for Okta, Auth0, and other SSO providers via external browser authentication
+- **Authentication Methods**: Password-based and SAML2 browser-based SSO authentication
+- **SSO Support**: Full support for Auth0, Okta, Azure AD, and other SAML2 providers via external browser authentication
 - **Secret Management**: Secure credential storage using DuckDB's secrets system
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
@@ -306,116 +313,63 @@ CREATE SECRET my_snowflake (
 SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'my_snowflake');
 ```
 
-### 2. SSO/OIDC Browser Authentication
+### 2. Browser-Based SAML2 SSO Authentication
 
-For organizations using Okta, Auth0, or other SSO providers. The browser will open for authentication:
+For organizations using Auth0, Okta, Azure AD, or other SAML2 providers. The browser will open for authentication:
 
 ```sql
 CREATE SECRET my_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_EMAIL',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    AUTH_TYPE 'OIDC'
+    AUTH_TYPE 'ext_browser'
 );
 
--- Browser will open for SSO login
-ATTACH '' AS sf (TYPE snowflake, SECRET my_sso);
-SELECT CURRENT_USER();
+-- Browser will open for SAML2 SSO login
+SELECT * FROM snowflake_scan(
+    'SELECT CURRENT_USER()',
+    'my_sso'
+);
 ```
 
-**Prerequisites for SSO:**
-- Snowflake administrator must configure EXTERNAL_OAUTH security integration
-- Your identity provider (Okta/Auth0) must be linked to Snowflake
+**Prerequisites for SAML2 SSO:**
+- Snowflake administrator must configure SAML2 security integration
+- Your identity provider (Auth0/Okta/Azure AD) must be configured for SAML2
+- See [SAML2_SETUP_GUIDE.md](SAML2_SETUP_GUIDE.md) for complete setup instructions
 
-#### Configuring SSO/OIDC Authentication
+#### Configuring SAML2 SSO Authentication
 
-**Step 1: Snowflake Configuration (Administrator)**
+For complete step-by-step setup instructions with Auth0, Okta, or other SAML2 providers, see:
 
-A Snowflake administrator must create an EXTERNAL_OAUTH security integration:
+**[SAML2_SETUP_GUIDE.md](SAML2_SETUP_GUIDE.md)** - Complete configuration guide
 
-```sql
--- Run this in Snowflake as ACCOUNTADMIN
-CREATE SECURITY INTEGRATION okta_integration
-  TYPE = EXTERNAL_OAUTH
-  ENABLED = TRUE
-  EXTERNAL_OAUTH_TYPE = OKTA
-  EXTERNAL_OAUTH_ISSUER = 'https://yourcompany.okta.com/oauth2/default'
-  EXTERNAL_OAUTH_JWS_KEYS_URL = 'https://yourcompany.okta.com/oauth2/default/v1/keys'
-  EXTERNAL_OAUTH_AUDIENCE_LIST = ('https://yourcompany.snowflakecomputing.com')
-  EXTERNAL_OAUTH_TOKEN_USER_MAPPING_CLAIM = 'sub'
-  EXTERNAL_OAUTH_SNOWFLAKE_USER_MAPPING_ATTRIBUTE = 'LOGIN_NAME'
-  EXTERNAL_OAUTH_SCOPE_DELIMITER = ' ';
-```
-
-**Customize these values:**
-- `EXTERNAL_OAUTH_ISSUER`: Your Okta authorization server URL
-- `EXTERNAL_OAUTH_JWS_KEYS_URL`: Your Okta public keys endpoint
-- `EXTERNAL_OAUTH_AUDIENCE_LIST`: Your Snowflake account URL
-
-**For Auth0:**
-```sql
-CREATE SECURITY INTEGRATION auth0_integration
-  TYPE = EXTERNAL_OAUTH
-  ENABLED = TRUE
-  EXTERNAL_OAUTH_TYPE = CUSTOM
-  EXTERNAL_OAUTH_ISSUER = 'https://yourcompany.auth0.com/'
-  EXTERNAL_OAUTH_JWS_KEYS_URL = 'https://yourcompany.auth0.com/.well-known/jwks.json'
-  EXTERNAL_OAUTH_AUDIENCE_LIST = ('https://yourcompany.snowflakecomputing.com')
-  EXTERNAL_OAUTH_TOKEN_USER_MAPPING_CLAIM = 'sub'
-  EXTERNAL_OAUTH_SNOWFLAKE_USER_MAPPING_ATTRIBUTE = 'LOGIN_NAME'
-  EXTERNAL_OAUTH_SCOPE_DELIMITER = ' ';
-```
-
-**Step 2: Okta Configuration (Administrator)**
-
-In your Okta admin console:
-
-1. **Create a new OAuth 2.0 Application**
-   - Application type: Web Application
-   - Grant types: Authorization Code
-
-2. **Configure Redirect URIs**
-   - Add your Snowflake callback URLs
-   - Format: `https://<account>.snowflakecomputing.com/oauth/complete`
-
-3. **Configure Scopes**
-   - Enable: `openid`, `profile`, `email`
-
-4. **Note the Client ID**
-   - Save for reference (not needed in DuckDB extension code)
-
-**Step 3: Test SSO Authentication**
+**Quick Example:**
 
 ```sql
--- Load the extension
-LOAD snowflake;
-
--- Create secret with SSO
-CREATE SECRET test_sso (
+-- Create secret with SAML2 browser authentication
+CREATE SECRET my_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_EMAIL@company.com',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    AUTH_TYPE 'OIDC'
+    AUTH_TYPE 'ext_browser'
 );
 
--- Browser will open for SSO login
-ATTACH '' AS sf (TYPE snowflake, SECRET test_sso);
-
--- Test the connection
-SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
+-- Query using snowflake_scan (browser opens for auth)
+SELECT * FROM snowflake_scan(
+    'SELECT CURRENT_USER()',
+    'my_sso'
+);
 ```
 
 ### Supported Authentication Methods
 
 Currently supported authentication methods:
 - **Password Authentication** - Username and password
-- **SSO/OIDC Browser Authentication** - External browser with Okta/Auth0
+- **SAML2 Browser Authentication (ext_browser)** - Browser-based SSO with Auth0, Okta, Azure AD, etc.
 
-**Note:** Key Pair (JWT), OAuth Token, and Workload Identity authentication methods are not currently supported but may be added in future releases.
+**Note:** OAuth Token, Key Pair (JWT), and Workload Identity authentication methods are not currently supported.
 
 ### Common Secret Parameters
 
@@ -443,25 +397,15 @@ CREATE SECRET snowflake_staging (...);
 CREATE SECRET snowflake_prod (...);
 ```
 
-**Token Rotation:**
-```sql
-DROP SECRET snowflake_prod;
-CREATE SECRET snowflake_prod (
-    TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT',
-    DATABASE 'YOUR_DATABASE',
-    OIDC_TOKEN 'NEW_ROTATED_TOKEN_HERE'
-);
-```
-
 **Minimal Permissions:**
 ```sql
 CREATE SECRET snowflake_readonly (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
+    USER 'YOUR_USERNAME',
+    PASSWORD 'YOUR_PASSWORD',
     DATABASE 'YOUR_DATABASE',
-    ROLE 'READONLY_ROLE',
-    OIDC_TOKEN 'READONLY_TOKEN_HERE'
+    ROLE 'READONLY_ROLE'
 );
 ```
 
@@ -489,7 +433,7 @@ SELECT * FROM snowflake_scan('SELECT CURRENT_USER()', 'test_password');
 -- Expected result: Your username
 ```
 
-### Test SSO/OIDC Authentication
+### Test SAML2 SSO Authentication
 
 ```sql
 -- Load extension
@@ -499,17 +443,16 @@ LOAD snowflake;
 CREATE SECRET test_sso (
     TYPE snowflake,
     ACCOUNT 'YOUR_ACCOUNT',
-    USER 'YOUR_EMAIL@company.com',
     DATABASE 'YOUR_DATABASE',
     WAREHOUSE 'YOUR_WAREHOUSE',
-    AUTH_TYPE 'OIDC'
+    AUTH_TYPE 'ext_browser'
 );
 
--- Browser will open for authentication
-ATTACH '' AS sf (TYPE snowflake, SECRET test_sso);
-
--- Test the connection
-SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE();
+-- Browser will open for SAML2 authentication
+SELECT * FROM snowflake_scan(
+    'SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_DATABASE()',
+    'test_sso'
+);
 
 -- Expected result: Your user, role, and database
 ```
@@ -526,9 +469,10 @@ SELECT * FROM duckdb_extensions() WHERE extension_name = 'snowflake';
 ```
 
 **SSO browser doesn't open:**
-- Ensure Snowflake EXTERNAL_OAUTH is configured
-- Verify your user email matches Snowflake username
+- Ensure Snowflake SAML2 integration is configured
+- Verify your email matches the Snowflake user's email
 - Check default browser settings
+- See [SAML2_SETUP_GUIDE.md](SAML2_SETUP_GUIDE.md) for troubleshooting
 
 **Password authentication fails:**
 - Verify username and password are correct
@@ -700,14 +644,14 @@ SELECT * FROM snowflake_scan(
 4. **Environment Separation**: Use different secrets for dev/test/prod environments
 5. **Secure Storage**: Secrets are stored encrypted in DuckDB's internal storage
 
-### OIDC Authentication (Recommended)
-1. **Use OIDC Tokens**: Prefer OIDC authentication over passwords for enhanced security
-2. **Token Rotation**: Regularly rotate OIDC tokens for better security
-3. **PKCE Security**: The extension automatically uses PKCE for secure OIDC flows
-4. **State Validation**: CSRF protection is built into the OIDC implementation
-5. **Encrypted Storage**: OIDC tokens are stored securely in DuckDB secrets
-6. **Provider Integration**: Works with enterprise identity providers (Okta, Auth0, Azure AD)
-7. **No Password Storage**: Eliminates password management and storage risks
+### SAML2 SSO Authentication (Recommended)
+1. **Use Browser SSO**: Prefer SAML2 browser authentication over passwords for enhanced security
+2. **Multi-Factor Auth**: Enable MFA in your identity provider for additional protection
+3. **Centralized Identity**: Leverages your organization's existing identity management
+4. **Provider Integration**: Works with enterprise identity providers (Auth0, Okta, Azure AD, AD FS)
+5. **No Password Storage**: Eliminates password management and storage risks
+6. **Session Management**: Sessions are managed through your identity provider
+7. **Audit Trail**: All authentication events are logged in both Snowflake and your IdP
 
 ## Support
 

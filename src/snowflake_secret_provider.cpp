@@ -128,12 +128,14 @@ void SnowflakeSecret::Validate() const {
 		                            StringUtil::Join(missing_fields, ", "));
 	}
 
-	// Validate authentication method - must have password, OAuth token, or OIDC params
+	// Validate authentication method - must have password, OAuth token, OIDC params, or ext_browser
 	bool has_password_auth = false;
 	bool has_oauth_auth = false;
 	bool has_oidc_auth = false;
+	bool has_ext_browser_auth = false;
 
-	Value user_value, password_value, oauth_token_value, oidc_token_value, oidc_client_id_value, token_file_value;
+	Value user_value, password_value, oauth_token_value, oidc_token_value, oidc_client_id_value, token_file_value,
+	    auth_type_value;
 	if (TryGetValue("user", user_value) && !user_value.IsNull() && TryGetValue("password", password_value) &&
 	    !password_value.IsNull()) {
 		has_password_auth = true;
@@ -155,12 +157,21 @@ void SnowflakeSecret::Validate() const {
 		has_oidc_auth = true;
 	}
 
-	if (!has_password_auth && !has_oauth_auth && !has_oidc_auth) {
+	// Check for ext_browser (SAML2) authentication
+	if (TryGetValue("auth_type", auth_type_value) && !auth_type_value.IsNull()) {
+		auto auth_type_str = auth_type_value.ToString();
+		if (auth_type_str == "ext_browser" || auth_type_str == "externalbrowser") {
+			has_ext_browser_auth = true;
+		}
+	}
+
+	if (!has_password_auth && !has_oauth_auth && !has_oidc_auth && !has_ext_browser_auth) {
 		throw InvalidInputException("Snowflake secret requires one of: "
 		                            "1) 'user' and 'password' for password authentication, "
 		                            "2) 'oauth_token' for OAuth token authentication (custom EXTERNAL_OAUTH), "
 		                            "3) OIDC parameters ('oidc_client_id', etc.) for External OAuth with token "
-		                            "acquisition (not yet implemented)");
+		                            "acquisition (not yet implemented), "
+		                            "4) 'auth_type' = 'ext_browser' for SAML2/browser-based SSO");
 	}
 
 	if (has_password_auth && has_oauth_auth) {
@@ -223,6 +234,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 	                                  "warehouse",
 	                                  "schema",
 	                                  "role",
+	                                  "auth_type",
 	                                  "oidc_token",
 	                                  "oidc_client_id",
 	                                  "oidc_issuer_url",
@@ -287,7 +299,7 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["role"] = LogicalType::VARCHAR;
 
 	// OAuth authentication parameters
-	create_function.named_parameters["oauth_token"] = LogicalType::VARCHAR;
+	// create_function.named_parameters["oauth_token"] = LogicalType::VARCHAR;
 
 	// OIDC authentication parameters (for token acquisition flow)
 	create_function.named_parameters["oidc_token"] = LogicalType::VARCHAR;
@@ -299,7 +311,10 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	// Other authentication methods (not currently supported)
 	create_function.named_parameters["token_file_path"] = LogicalType::VARCHAR;
 	create_function.named_parameters["workload_identity_provider"] = LogicalType::VARCHAR;
-	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
+	// create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
+	// create_function.named_parameters["private_key_passphrase"] = LogicalType::VARCHAR;
+	// create_function.named_parameters["okta_url"] = LogicalType::VARCHAR;
+	create_function.named_parameters["auth_type"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);
