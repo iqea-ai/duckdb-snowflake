@@ -54,6 +54,54 @@ string SnowflakeSecret::GetSchema() const {
 	return "";
 }
 
+string SnowflakeSecret::GetRole() const {
+	Value value;
+	if (TryGetValue("role", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetAuthType() const {
+	Value value;
+	if (TryGetValue("auth_type", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetToken() const {
+	Value value;
+	if (TryGetValue("token", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOktaUrl() const {
+	Value value;
+	if (TryGetValue("okta_url", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetPrivateKey() const {
+	Value value;
+	if (TryGetValue("private_key", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetPrivateKeyPassphrase() const {
+	Value value;
+	if (TryGetValue("private_key_passphrase", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
 //! Validate that all required fields are present
 void SnowflakeSecret::Validate() const {
 	vector<string> required_fields = {"user", "password", "account", "database"};
@@ -109,9 +157,13 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 	// Create the secret with the provided scope and name
 	auto secret = make_uniq<SnowflakeSecret>(input.scope, input.provider, input.name);
 
-	// Extract Snowflake-specific parameters from the input options
-	vector<string> required_fields = {"user", "password", "account", "database"};
-	vector<string> optional_fields = {"warehouse", "schema"};
+	// Always required fields
+	vector<string> required_fields = {"account", "database"};
+
+	// All possible optional fields
+	vector<string> optional_fields = {"user",        "password", "warehouse", "schema",
+	                                  "auth_type",   "token",    "okta_url",  "private_key_passphrase",
+	                                  "private_key", "role"};
 
 	// Process required fields
 	for (const auto &field : required_fields) {
@@ -132,8 +184,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 		}
 	}
 
-	// Validate the secret
-	secret->Validate();
+	// Note: No validation call - let ADBC driver validate based on auth_type
 
 	return std::move(secret);
 }
@@ -165,6 +216,14 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["warehouse"] = LogicalType::VARCHAR;
 	create_function.named_parameters["database"] = LogicalType::VARCHAR;
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
+	create_function.named_parameters["role"] = LogicalType::VARCHAR;
+
+	// OAuth/Okta/Key Pair authentication parameters
+	create_function.named_parameters["auth_type"] = LogicalType::VARCHAR;
+	create_function.named_parameters["token"] = LogicalType::VARCHAR;
+	create_function.named_parameters["okta_url"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key_passphrase"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);

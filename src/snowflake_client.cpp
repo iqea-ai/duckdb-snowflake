@@ -180,30 +180,50 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.account", config.account.c_str(), &error);
 	CheckError(status, "Failed to set account", &error);
 
-	if (!config.username.empty()) {
-		status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
-		CheckError(status, "Failed to set username", &error);
-	}
-
 	// Set authentication based on type
 	switch (config.auth_type) {
 	case SnowflakeAuthType::PASSWORD:
-		// Default auth type, no need to set adbc.snowflake.sql.auth_type
+		// Default auth type, set username and password
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		if (!config.password.empty()) {
 			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
 			CheckError(status, "Failed to set password", &error);
 		}
 		break;
 	case SnowflakeAuthType::OAUTH:
+		// For External OAuth - use auth_oauth and provide token
+		std::cerr << "[DEBUG] Configuring OAuth authentication" << std::endl;
+
+		// Set auth_type to 'auth_oauth' - this is the correct ADBC parameter
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
 		CheckError(status, "Failed to set OAuth auth type", &error);
+		std::cerr << "[DEBUG] Set auth_type=auth_oauth" << std::endl;
+
+		// Set the OAuth token
 		if (!config.oauth_token.empty()) {
+			std::cerr << "[DEBUG] Setting token (length: " << config.oauth_token.length() << ")" << std::endl;
 			status =
 			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
 			CheckError(status, "Failed to set OAuth token", &error);
+			std::cerr << "[DEBUG] Token set successfully" << std::endl;
+		}
+
+		// Username may still be needed for user mapping
+		if (!config.username.empty()) {
+			std::cerr << "[DEBUG] Setting username: " << config.username << std::endl;
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username for OAuth", &error);
 		}
 		break;
 	case SnowflakeAuthType::KEY_PAIR:
+		// Key pair authentication with JWT
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_jwt", &error);
 		CheckError(status, "Failed to set key-pair auth type", &error);
 		if (!config.private_key.empty()) {
@@ -218,10 +238,19 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		}
 		break;
 	case SnowflakeAuthType::EXT_BROWSER:
+		// External browser SSO - username may be optional depending on SSO setup
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
 		CheckError(status, "Failed to set external browser auth type", &error);
 		break;
 	case SnowflakeAuthType::OKTA:
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_okta", &error);
 		CheckError(status, "Failed to set Okta auth type", &error);
 		if (!config.okta_url.empty()) {
@@ -231,6 +260,10 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		}
 		break;
 	case SnowflakeAuthType::MFA:
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_mfa", &error);
 		CheckError(status, "Failed to set MFA auth type", &error);
 		if (!config.password.empty()) {

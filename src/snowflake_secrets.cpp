@@ -71,7 +71,34 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		config.account = snowflake_secret->GetAccount();
 		config.warehouse = snowflake_secret->GetWarehouse();
 		config.database = snowflake_secret->GetDatabase();
+		config.role = snowflake_secret->GetRole();
 		// Note: schema is not stored in SnowflakeConfig as per the struct definition
+
+		// Extract authentication-specific fields
+		auto auth_type_str = snowflake_secret->GetAuthType();
+		std::cerr << "[DEBUG] GetCredentials: auth_type_str = '" << auth_type_str << "'" << std::endl;
+		if (!auth_type_str.empty()) {
+			// Parse auth_type string to enum
+			if (auth_type_str == "oauth") {
+				config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
+				config.oauth_token = snowflake_secret->GetToken();
+				std::cerr << "[DEBUG] Set auth_type to OAUTH, token length = " << config.oauth_token.length()
+				          << std::endl;
+			} else if (auth_type_str == "key_pair") {
+				config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
+				config.private_key = snowflake_secret->GetPrivateKey();
+				config.private_key_passphrase = snowflake_secret->GetPrivateKeyPassphrase();
+			} else if (auth_type_str == "ext_browser" || auth_type_str == "externalbrowser") {
+				config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
+			} else if (auth_type_str == "okta") {
+				config.auth_type = snowflake::SnowflakeAuthType::OKTA;
+				config.okta_url = snowflake_secret->GetOktaUrl();
+			} else if (auth_type_str == "mfa") {
+				config.auth_type = snowflake::SnowflakeAuthType::MFA;
+			}
+		} else {
+			std::cerr << "[DEBUG] auth_type_str is empty, using default PASSWORD auth" << std::endl;
+		}
 
 	} catch (const std::exception &e) {
 		throw InvalidInputException("Failed to retrieve credentials for profile '" + profile_name + "': " + e.what());

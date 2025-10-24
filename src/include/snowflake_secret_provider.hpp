@@ -14,6 +14,9 @@ public:
 		// Mark sensitive fields for redaction
 		redact_keys.insert("password");
 		redact_keys.insert("secret");
+		redact_keys.insert("token");
+		redact_keys.insert("private_key");
+		redact_keys.insert("private_key_passphrase");
 	}
 
 	//! Get Snowflake-specific fields
@@ -23,6 +26,14 @@ public:
 	string GetWarehouse() const;
 	string GetDatabase() const;
 	string GetSchema() const;
+	string GetRole() const;
+
+	//! Get authentication-specific fields
+	string GetAuthType() const;
+	string GetToken() const;
+	string GetOktaUrl() const;
+	string GetPrivateKey() const;
+	string GetPrivateKeyPassphrase() const;
 
 	//! Validate that all required fields are present
 	void Validate() const;
