@@ -23,7 +23,8 @@ endif()
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
 # used in cmake with find_package. Feel free to remove or replace with other dependencies.
 # Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
-find_package(OpenSSL REQUIRED)
+# OpenSSL is not needed - the ADBC driver handles all SSL/TLS communication
+# find_package(OpenSSL REQUIRED)
 
 # ADBC will be loaded dynamically at runtime
 # Define the expected library name for each platform
@@ -67,14 +68,15 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 set_property(TARGET ${LOADABLE_EXTENSION_NAME} PROPERTY "EXTENSION_VERSION_SCRIPT" "TRUE")
 
 # Link dependencies in both the static library and the loadable extension
-target_link_libraries(${EXTENSION_NAME} 
-    OpenSSL::SSL 
-    OpenSSL::Crypto
-)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} 
-    OpenSSL::SSL 
-    OpenSSL::Crypto
-)
+# OpenSSL is not needed - the ADBC driver handles all SSL/TLS communication
+# target_link_libraries(${EXTENSION_NAME} 
+#     OpenSSL::SSL 
+#     OpenSSL::Crypto
+# )
+# target_link_libraries(${LOADABLE_EXTENSION_NAME} 
+#     OpenSSL::SSL 
+#     OpenSSL::Crypto
+# )
 
 # Add platform-specific libraries for dynamic loading
 if(WIN32)

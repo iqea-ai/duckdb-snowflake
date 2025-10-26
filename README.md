@@ -55,9 +55,9 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 ### Key Features
 
-- **Direct Querying**: Execute SQL queries against Snowflake databases from within DuckDB
+- **Direct Querying**: Execute SQL queries against Snowflake from within DuckDB
 - **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Secure Authentication**: Password-based authentication with secure credential storage
+- **Multiple Authentication Methods**: Support for password, OAuth, key-pair (with passphrase support), external browser SSO, Okta, and MFA authentication
 - **Secret Management**: Secure credential storage using DuckDB's secrets system
 - **Storage Extension**: Attach Snowflake databases as read-only storage
 
@@ -195,19 +195,370 @@ SELECT snowflake_version();
 -- Should return: "Snowflake Extension v0.1.0"
 ```
 
-### Troubleshooting
-
-**If you get "ADBC driver not supported" error:**
-- Verify the driver file is in the correct location
-- Check file permissions (should be executable)
-- Ensure you downloaded the correct architecture for your platform
-
-**If you get "Driver not found" debug messages:**
-- The extension will search multiple locations automatically
-- Check the debug output to see which paths it's checking
-- Place the driver in one of the searched locations
-
 ## Configuration
+
+### Authentication Methods
+
+The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and infrastructure.
+
+#### Authentication Protocol Overview
+
+| Method | Protocol | Browser Required | Use Case | Status |
+|--------|----------|------------------|----------|--------|
+| **Password** | Username/Password | No | Development, simple setups | ✅ Tested |
+| **OAuth** | OAuth 2.0 | No | Programmatic access, APIs, automation, **recommended for Okta** | ✅ Implemented |
+| **Key Pair** | RSA Key Pair | No | Production, headless servers, highest security | ✅ Implemented |
+| **EXT_BROWSER** | SAML 2.0 | Yes | Interactive SSO, any SAML 2.0 IdP (Okta, AD FS) | ✅ Tested |
+| **OKTA** | Native Okta API | Yes | Okta-specific native integration | ✅ Implemented |
+| **MFA** | Password + MFA | No | Enhanced password security | ✅ Implemented |
+
+**Important Notes:**
+- **For Okta users**: OAuth is recommended over EXT_BROWSER/SAML for better security, flexibility, and programmatic access
+- **EXT_BROWSER uses SAML 2.0**: Works with any SAML 2.0-compliant identity provider including Okta, AD FS, Azure AD
+- **OAuth uses OAuth 2.0**: Ideal for headless environments, automation, and modern applications
+- **Browser-based methods** (EXT_BROWSER, OKTA) require interactive browser access and won't work in containerized/headless environments
+
+**Testing Status:**
+- **✅ Tested**: PASSWORD and EXT_BROWSER have been fully tested and verified working
+- **✅ Implemented**: OAuth, Key Pair, OKTA, and MFA are fully implemented but require external configuration:
+  - **OAuth**: Requires External OAuth integration configured in Snowflake (see setup instructions below)
+  - **Key Pair**: Requires RSA key pair generation and public key registration in Snowflake
+  - **OKTA**: Requires Okta URL configuration and Okta-specific setup
+  - **MFA**: Requires MFA-enabled Snowflake account
+
+#### 1. Password Authentication (Default)
+
+Standard username and password authentication.
+
+```sql
+CREATE SECRET my_snowflake_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    PASSWORD 'mypassword',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;password=mypassword;database=mydb;warehouse=mywh
+```
+
+#### 2. OAuth Token Authentication
+
+Use **OAuth 2.0** tokens for authentication. **Recommended for Auth0/Okta environments** and ideal for programmatic access.
+
+**Protocol**: OAuth 2.0
+
+**Advantages**:
+- No browser required (works in headless/containerized environments)
+- Supports programmatic authentication for APIs and automation
+- Better security with configurable authorization flows
+- Token-based access control with granular permissions
+- Recommended by Snowflake for modern IdP integration
+
+##### DuckDB Usage
+
+```sql
+CREATE SECRET my_oauth_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'your_user_or_client_id@clients',
+    AUTH_TYPE 'oauth',
+    TOKEN 'your_oauth_access_token',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+
+-- Use the secret
+ATTACH '' AS sf (TYPE snowflake, SECRET my_oauth_secret, READ_ONLY);
+SELECT * FROM sf.schema.table LIMIT 10;
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=oauth;token=your_oauth_access_token;database=mydb;warehouse=mywh
+```
+
+##### Setup Required in Snowflake
+
+Before using OAuth authentication, you must configure External OAuth in Snowflake:
+
+**Step 1: Create Security Integration in Snowflake**
+
+```sql
+USE ROLE ACCOUNTADMIN;
+
+CREATE SECURITY INTEGRATION my_oauth_integration
+  TYPE = EXTERNAL_OAUTH
+  ENABLED = TRUE
+  EXTERNAL_OAUTH_TYPE = CUSTOM
+  EXTERNAL_OAUTH_ISSUER = 'https://YOUR_IDP_DOMAIN'  -- e.g., 'https://dev-abc123.us.auth0.com/' for Auth0
+  EXTERNAL_OAUTH_JWS_KEYS_URL = 'https://YOUR_IDP_DOMAIN/.well-known/jwks.json'
+  EXTERNAL_OAUTH_AUDIENCE_LIST = ('https://YOUR_ACCOUNT.snowflakecomputing.com')
+  EXTERNAL_OAUTH_TOKEN_USER_MAPPING_CLAIM = 'sub'  -- or 'email' depending on your token
+  EXTERNAL_OAUTH_SNOWFLAKE_USER_MAPPING_ATTRIBUTE = 'LOGIN_NAME'
+  EXTERNAL_OAUTH_ANY_ROLE_MODE = 'ENABLE';
+
+GRANT USAGE ON INTEGRATION my_oauth_integration TO ROLE PUBLIC;
+```
+
+**Step 2: Create Snowflake User Matching Token Claim**
+
+```sql
+-- The username must match the claim in your OAuth token (e.g., 'sub' claim)
+CREATE USER IF NOT EXISTS "your_token_sub_claim"
+  LOGIN_NAME = 'your_token_sub_claim'
+  DEFAULT_ROLE = PUBLIC
+  DEFAULT_WAREHOUSE = 'COMPUTE_WH';
+
+GRANT ROLE PUBLIC TO USER "your_token_sub_claim";
+GRANT IMPORTED PRIVILEGES ON DATABASE your_database TO ROLE PUBLIC;
+```
+
+##### Setup for Auth0
+
+**1. Configure Auth0 API:**
+   - Go to Auth0 Dashboard → APIs → Create API
+   - **Name**: `Snowflake OAuth`
+   - **Identifier**: `https://YOUR_ACCOUNT.snowflakecomputing.com`
+   - Click Create
+
+**2. Create Machine-to-Machine Application:**
+   - Go to Applications → Create Application
+   - Choose "Machine to Machine Applications"
+   - Authorize it to use your Snowflake API
+   - Note down **Client ID**, **Client Secret**, and **Domain**
+
+**3. Get OAuth Token:**
+
+```bash
+curl --request POST \
+  --url 'https://YOUR_AUTH0_DOMAIN/oauth/token' \
+  --header 'content-type: application/json' \
+  --data '{
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "audience": "https://YOUR_ACCOUNT.snowflakecomputing.com",
+    "grant_type": "client_credentials"
+  }'
+```
+
+The response will contain an `access_token` - use this as your `TOKEN` in the CREATE SECRET statement.
+
+##### Setup for Okta
+
+**1. Create OAuth Integration in Snowflake:**
+   - Use the same Snowflake configuration above
+   - Set `EXTERNAL_OAUTH_ISSUER` to your Okta issuer URL
+   - Set `EXTERNAL_OAUTH_JWS_KEYS_URL` to your Okta JWKS URL
+
+**2. Configure Okta:**
+   - Create an OAuth 2.0 application in Okta
+   - Configure client credentials grant type
+   - Set audience to match your Snowflake account URL
+   - Use Okta's token endpoint to obtain access tokens
+
+**Note**: For both Auth0 and Okta, ensure the token's `sub` or `email` claim matches the Snowflake user's `LOGIN_NAME`.
+
+#### 3. Key Pair Authentication
+
+Use RSA key pairs for secure, password-less authentication.
+
+**Basic Key Pair (Unencrypted Private Key):**
+
+```sql
+CREATE SECRET my_keypair_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY '/path/to/rsa_key.p8',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=key_pair;private_key=/path/to/rsa_key.p8;database=mydb;warehouse=mywh
+```
+
+**Key Pair with Encrypted Private Key:**
+
+For enhanced security, use a passphrase-protected private key (PKCS#8 format).
+
+```sql
+CREATE SECRET my_secure_keypair_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY '/path/to/encrypted_rsa_key.p8',
+    PRIVATE_KEY_PASSPHRASE 'your_passphrase',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=key_pair;private_key=/path/to/encrypted_rsa_key.p8;private_key_passphrase=your_passphrase;database=mydb;warehouse=mywh
+```
+
+**Generating Key Pairs:**
+
+```bash
+# Generate private key with passphrase
+openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -passout pass:your_passphrase
+
+# Generate public key
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub -passin pass:your_passphrase
+
+# Assign public key to Snowflake user
+# In Snowflake, run:
+# ALTER USER myusername SET RSA_PUBLIC_KEY='<public_key_content>';
+```
+
+#### 4. External Browser SSO Authentication
+
+Authenticate using your web browser with **SAML 2.0** identity providers (Auth0, Okta, AD FS, Azure AD, etc.). This opens a browser window for SSO login.
+
+**Protocol**: SAML 2.0 (Security Assertion Markup Language)
+
+**How it works**:
+1. Client initiates authentication
+2. Browser window opens to your IdP login page
+3. User authenticates with IdP (e.g., Auth0/Okta)
+4. IdP sends SAML assertion to Snowflake
+5. Snowflake validates assertion and creates session
+
+##### DuckDB Usage
+
+```sql
+CREATE SECRET my_sso_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse',
+    AUTH_TYPE 'ext_browser'
+);
+
+-- Use the secret (browser will open for authentication)
+ATTACH '' AS sf (TYPE snowflake, SECRET my_sso_secret, READ_ONLY);
+SELECT * FROM sf.schema.table LIMIT 10;
+```
+
+**Connection String:**
+```
+account=myaccount;auth_type=ext_browser;database=mydb;warehouse=mywh
+```
+
+**Note:** External browser authentication is also supported with the alias `externalbrowser`:
+```
+account=myaccount;auth_type=externalbrowser;database=mydb;warehouse=mywh
+```
+
+##### Setup Required in Snowflake
+
+**For SAML 2.0 SSO with Auth0:**
+
+**Step 1: Configure SAML Integration in Snowflake**
+
+```sql
+USE ROLE ACCOUNTADMIN;
+
+CREATE SECURITY INTEGRATION auth0_saml
+  TYPE = SAML2
+  ENABLED = TRUE
+  SAML2_ISSUER = 'urn:YOUR_AUTH0_DOMAIN'  -- e.g., 'urn:dev-abc123.us.auth0.com'
+  SAML2_SSO_URL = 'https://YOUR_AUTH0_DOMAIN/samlp/YOUR_CLIENT_ID'
+  SAML2_PROVIDER = 'CUSTOM'
+  SAML2_X509_CERT = 'YOUR_AUTH0_SIGNING_CERTIFICATE'  -- Download from Auth0
+  SAML2_ENABLE_SP_INITIATED = TRUE;
+
+GRANT USAGE ON INTEGRATION auth0_saml TO ROLE PUBLIC;
+```
+
+**Step 2: Get Snowflake SAML Metadata**
+
+```sql
+-- Get the metadata URL
+SELECT SYSTEM$SHOW_SAML_IDP_METADATA('auth0_saml');
+```
+
+**Step 3: Configure Auth0:**
+   1. Go to Auth0 Dashboard → Applications → Create Application
+   2. Choose "Regular Web Application"
+   3. Go to "Addons" tab → Enable "SAML2 Web App"
+   4. Configure SAML settings:
+      - **Application Callback URL**: Use Snowflake's ACS URL from metadata
+      - **Audience**: `https://YOUR_ACCOUNT.snowflakecomputing.com`
+      - **Name Identifier Format**: `urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress`
+   5. Download the signing certificate and add it to the Snowflake integration
+
+**For SAML 2.0 SSO with Okta:**
+
+**Step 1: Configure Okta Application**
+   1. Okta Admin Console → Applications → Create App Integration
+   2. Choose "SAML 2.0"
+   3. Configure Single sign-on URL and Audience URI from Snowflake metadata
+   4. Complete attribute mapping
+
+**Step 2: Configure Snowflake**
+   - Use the same `CREATE SECURITY INTEGRATION` as above
+   - Set `SAML2_ISSUER` to your Okta issuer URI
+   - Set `SAML2_SSO_URL` to your Okta SSO URL
+   - Add Okta's X.509 certificate
+
+**Limitations**:
+- Requires interactive browser access (not suitable for headless/containerized environments)
+- User must be present to authenticate
+- For programmatic access, consider using OAuth instead
+
+#### 5. Native Okta Authentication
+
+Direct authentication with Okta using a custom Okta URL.
+
+```sql
+CREATE SECRET my_okta_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    AUTH_TYPE 'okta',
+    OKTA_URL 'https://yourcompany.okta.com',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;auth_type=okta;okta_url=https://yourcompany.okta.com;database=mydb;warehouse=mywh
+```
+
+#### 6. Multi-Factor Authentication (MFA)
+
+Authenticate using username, password, and MFA token.
+
+```sql
+CREATE SECRET my_mfa_secret (
+    TYPE snowflake,
+    ACCOUNT 'myaccount.snowflakecomputing.com',
+    USER 'myusername',
+    PASSWORD 'mypassword',
+    AUTH_TYPE 'mfa',
+    DATABASE 'mydatabase',
+    WAREHOUSE 'mywarehouse'
+);
+```
+
+**Connection String:**
+```
+account=myaccount;user=myusername;password=mypassword;auth_type=mfa;database=mydb;warehouse=mywh
+```
 
 ### Setting Up Snowflake Credentials
 
@@ -218,7 +569,7 @@ Create a named profile to securely store your Snowflake credentials:
 **Creating a Secret:**
 
 ```sql
--- Secret with optional parameters
+-- Secret with optional parameters (password authentication example)
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
     ACCOUNT 'adbniqz-ct69933',
@@ -369,25 +720,17 @@ COPY (
 ```
 
 
-## Troubleshooting
+### Troubleshooting
 
-### Common Errors
+**If you get "ADBC driver not supported" error:**
+- Verify the driver file is in the correct location
+- Check file permissions (should be executable)
+- Ensure you downloaded the correct architecture for your platform
 
-**Connection Errors:**
-
-```
-Failed to initialize connection: [Snowflake] 390100 (08004): Incorrect username or password was specified.
-```
-
-**Solution**: Verify your credentials and account information.
-
-**Query Errors:**
-
-```
-Failed to get schema: [Snowflake] 090105 (22000): Cannot perform SELECT. This session does not have a current database.
-```
-
-**Solution**: Specify a database in the connection string or use fully qualified table names.
+**If you get "Driver not found" debug messages:**
+- The extension will search multiple locations automatically
+- Check the debug output to see which paths it's checking
+- Place the driver in one of the searched locations
 
 ### Debugging Tips
 
@@ -412,23 +755,12 @@ SELECT * FROM snowflake_scan(
 - **Large result sets**: Should be filtered at source for optimal performance, consider using snowflake_scan
 - ****COUNT(\*)** like column alias operations are not supported until projection pushdown is implemented
 
-## Security Best Practices
-
-1. **Use Strong Passwords**: Create complex passwords for your Snowflake accounts
-2. **Principle of Least Privilege**: Use Snowflake roles with minimal required permissions
-3. **Regular Rotation**: Update passwords and credentials regularly
-4. **Environment Separation**: Use different secrets for dev/test/prod environments
-5. **Secure Storage**: Secrets are stored encrypted in DuckDB's internal storage
 
 ## Support
 
 For issues or questions:
 
-- Check the [GitHub repository](https://github.com/your-repo/duckdb-snowflake)
-- Review Snowflake ADBC driver documentation
+- Check the [GitHub repository](https://github.com/iqea-ai/duckdb-snowflake). Raise any feature requests/issues under issues
+- Review Snowflake ADBC driver documentation (https://arrow.apache.org/adbc/main/driver/snowflake.html)
 - Ensure you have the latest version of the extension
 
-### For Developers
-
-If you want to build the extension from source or contribute to development, see [BUILD.md](BUILD.md) for detailed build instructions and development guidelines.# Trigger new workflow run
-# Test build with DuckDB 1.4.0
