@@ -1,0 +1,45 @@
+# name: test/sql/pushdown/pushdown_disabled.test
+# description: Test queries with pushdown disabled (default behavior)
+# group: [pushdown]
+
+require snowflake
+
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+statement ok
+LOAD snowflake;
+
+# Create test secret
+statement ok
+CREATE SECRET test_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}'
+);
+
+# Test 1: ATTACH with pushdown disabled (default)
+statement ok
+ATTACH '' AS snow_disabled (TYPE snowflake, SECRET test_secret, READ_ONLY);
+
+# Test 2: Simple projection query with pushdown disabled
+statement ok
+SELECT C_CUSTKEY, C_NAME FROM snow_disabled.tpch_sf1.customer WHERE C_CUSTKEY <= 5;
+
+# Test 3: Verify results are correct
+query II
+SELECT C_CUSTKEY, C_NAME FROM snow_disabled.tpch_sf1.customer WHERE C_CUSTKEY <= 3 ORDER BY C_CUSTKEY;
+----
+1	Customer#000000001
+2	Customer#000000002
+3	Customer#000000003
+
+statement ok
+DETACH snow_disabled;

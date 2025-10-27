@@ -4,6 +4,7 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/common/adbc/adbc.h"
+#include "duckdb/storage/table/scan_state.hpp"
 
 #include <utility>
 #include "snowflake_client_manager.hpp"
@@ -17,15 +18,27 @@ struct SnowflakeArrowStreamFactory {
 	// Snowflake connection managed by the client manager
 	shared_ptr<snowflake::SnowflakeClient> connection;
 
-	// SQL query to execute
+	// SQL query to execute (original base query)
 	std::string query;
+
+	// Modified query after applying pushdown (if enabled)
+	std::string modified_query;
 
 	// ADBC statement handle - initialized lazily when first needed
 	AdbcStatement statement;
 	bool statement_initialized = false;
 
+	// Pushdown configuration
+	bool filter_pushdown_enabled = false;
+	bool projection_pushdown_enabled = false;
+
+	// Pushdown parameters (set by DuckDB via UpdatePushdownParameters)
+	vector<string> projection_columns;
+	TableFilterSet *current_filters = nullptr;
+	vector<string> column_names; // Maps column indices to names for filter building
+
 	SnowflakeArrowStreamFactory(shared_ptr<snowflake::SnowflakeClient> conn, const std::string &query_str)
-	    : connection(std::move(conn)), query(query_str) {
+	    : connection(std::move(conn)), query(query_str), modified_query(query_str) {
 		std::memset(&statement, 0, sizeof(statement));
 	}
 
@@ -36,13 +49,17 @@ struct SnowflakeArrowStreamFactory {
 			AdbcStatementRelease(&statement, &error);
 		}
 	}
+
+	// Update pushdown parameters from DuckDB optimizer
+	// This is called by DuckDB when it wants to push filters and projections to the source
+	void UpdatePushdownParameters(const vector<string> &projection, TableFilterSet *filter_set);
 };
 
 // Function to produce an ArrowArrayStreamWrapper from the factory
 // This is called by DuckDB's arrow_scan when it needs to start scanning data
 // Parameters:
 //   factory_ptr: Pointer to our SnowflakeArrowStreamFactory cast to uintptr_t
-//   parameters: Arrow stream parameters (projection, filters, etc.) - currently unused
+//   parameters: Arrow stream parameters (projection columns and filters for pushdown)
 // Returns: An ArrowArrayStreamWrapper that provides Arrow data chunks
 unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr, ArrowStreamParameters &parameters);
 

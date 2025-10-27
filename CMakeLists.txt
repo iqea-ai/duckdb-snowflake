@@ -42,6 +42,7 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 set(EXTENSION_SOURCES
     src/snowflake_extension.cpp
     src/snowflake_arrow_utils.cpp
+    src/snowflake_query_builder.cpp
     src/snowflake_secrets.cpp
     src/snowflake_secret_provider.cpp
     src/snowflake_scan.cpp

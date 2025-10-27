@@ -19,7 +19,7 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	DPRINT("SnowflakeScanBind invoked\n");
 	// Validate parameters
 	if (input.inputs.size() < 2) {
-		throw BinderException("snowflake_scan requires at least 2 parameters: query and profile");
+		throw BinderException("snowflake_query requires at least 2 parameters: query and profile");
 	}
 
 	// Get query and profile
@@ -52,8 +52,10 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	// Create the bind data that inherits from ArrowScanFunctionData
 	// This allows us to use DuckDB's native Arrow scan implementation
 	auto bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
-	// TODO remove below line after implementing projection pushdown
-	bind_data->projection_pushdown_enabled = false;
+
+	// Disable pushdown for snowflake_scan - user controls the query explicitly
+	bind_data->factory->filter_pushdown_enabled = false;
+	bind_data->factory->projection_pushdown_enabled = false;
 
 	// Get the schema from Snowflake using ADBC's ExecuteSchema
 	// This executes the query with schema-only mode to get column information
@@ -79,17 +81,37 @@ TableFunction GetSnowflakeScanFunction() {
 	// We only provide our own bind function to set up the Snowflake connection
 	// All other operations (init_global, init_local, scan) use DuckDB's implementation
 	// Parameters: query (VARCHAR), profile (VARCHAR)
-	TableFunction snowflake_scan("snowflake_scan", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                             ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
-	                             snowflake::SnowflakeScanBind,            // Our bind function
-	                             ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
-	                             ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
+	TableFunction snowflake_query("snowflake_query", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                              ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
+	                              snowflake::SnowflakeScanBind,            // Our bind function
+	                              ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
+	                              ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
 
-	// TODO Enable projection and filter pushdown for optimization
-	snowflake_scan.projection_pushdown = false;
-	snowflake_scan.filter_pushdown = false;
+	// Disable pushdown for snowflake_query - user provides the query explicitly
+	snowflake_query.projection_pushdown = false;
+	snowflake_query.filter_pushdown = false;
 
-	return snowflake_scan;
+	return snowflake_query;
+}
+
+TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {
+	// Create a table function for ATTACH
+	// This function is used by SnowflakeTableEntry::GetScanFunction()
+	// The enable_pushdown parameter controls whether DuckDB can push filters and projections
+
+	// Create a parameterless function for ATTACH operations
+	// TableEntry provides bind_data directly, so we don't need parameters or a bind function
+	TableFunction table_scan("snowflake_table_scan", {},
+	                         ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
+	                         nullptr,                                 // No bind function needed
+	                         ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
+	                         ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
+
+	// Set pushdown flags based on the enable_pushdown parameter
+	table_scan.projection_pushdown = enable_pushdown;
+	table_scan.filter_pushdown = enable_pushdown;
+
+	return table_scan;
 }
 
 } // namespace duckdb
