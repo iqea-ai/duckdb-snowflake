@@ -1,0 +1,122 @@
+# name: test/sql/pushdown/filter_pushdown.test
+# description: Test filter and projection pushdown with ATTACH
+# group: [pushdown]
+
+# This test requires actual Snowflake credentials
+require snowflake
+
+statement ok
+LOAD snowflake;
+
+# Create a test secret
+statement ok
+CREATE SECRET test_secret (
+    TYPE snowflake,
+    ACCOUNT 'FLWILYJ-FL43292',
+    USER 'venkata@iqea.ai',
+    PASSWORD 'DuckDBSnowflake2025',
+    DATABASE 'SNOWFLAKE_SAMPLE_DATA'
+);
+
+# Attach Snowflake database with pushdown enabled
+statement ok
+ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
+
+# Test 1: Simple equality filter (should return count > 0)
+query I
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_MKTSEGMENT = 'HOUSEHOLD';
+----
+30189
+
+# Test 2: Greater than filter (verify queries execute successfully)
+statement ok
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000;
+
+# Test 3: Less than or equal filter
+statement ok
+SELECT COUNT(*) FROM snow.tpch_sf1.orders WHERE O_TOTALPRICE <= 100.0;
+
+# Test 4: Not equal filter
+statement ok
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_MKTSEGMENT != 'HOUSEHOLD';
+
+# Test 5: IS NULL filter (should return 0)
+query I
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_COMMENT IS NULL;
+----
+0
+
+# Test 6: IS NOT NULL filter (should return all rows = 150000)
+query I
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_PHONE IS NOT NULL;
+----
+150000
+
+# Test 7: Multiple filters (AND)
+statement ok
+SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000 AND C_MKTSEGMENT = 'HOUSEHOLD';
+
+# Test 8: Projection only (verify 5 rows returned)
+statement ok
+SELECT C_CUSTKEY, C_NAME FROM snow.tpch_sf1.customer LIMIT 5;
+
+# Test 9: Projection + Filter (verify exact customer keys)
+query III
+SELECT C_CUSTKEY, C_NAME, C_PHONE FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 3 ORDER BY C_CUSTKEY;
+----
+1	Customer#000000001	25-989-741-2988
+2	Customer#000000002	23-768-687-3665
+3	Customer#000000003	11-719-748-3364
+
+# Test 10: Multiple filters + projection
+statement ok
+SELECT C_CUSTKEY, C_MKTSEGMENT FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000 AND C_PHONE IS NOT NULL LIMIT 5;
+
+# Test 11: Join with filter pushdown on both tables
+# DuckDB performs advanced optimization here:
+# Query 1: SELECT N_NATIONKEY, N_NAME FROM nation WHERE N_NAME = 'GERMANY' -> gets N_NATIONKEY=7
+# Query 2: SELECT C_NATIONKEY, C_CUSTKEY, C_NAME FROM customer WHERE C_NATIONKEY = 7 (pushed down!)
+# This demonstrates that DuckDB can push join filters to individual table scans
+query ITT
+SELECT c.C_CUSTKEY, c.C_NAME, n.N_NAME
+FROM snow.tpch_sf1.customer c
+JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+WHERE n.N_NAME = 'GERMANY' AND c.C_CUSTKEY <= 100
+ORDER BY c.C_CUSTKEY
+LIMIT 3;
+----
+62	Customer#000000062	GERMANY
+71	Customer#000000071	GERMANY
+93	Customer#000000093	GERMANY
+
+# Test 12: Join with DYNAMIC_FILTER pushdown
+# DuckDB should push the filter from nation table to customer table
+query ITT
+SELECT c.C_CUSTKEY, c.C_NAME, n.N_NAME
+FROM snow.tpch_sf1.customer c
+JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+WHERE n.N_NAME = 'GERMANY' AND c.C_CUSTKEY <= 100
+ORDER BY c.C_CUSTKEY
+LIMIT 3;
+----
+62	Customer#000000062	GERMANY
+71	Customer#000000071	GERMANY
+93	Customer#000000093	GERMANY
+
+# Test 13: Join with multiple filters on both tables
+statement ok
+SELECT c.C_CUSTKEY, n.N_NAME, c.C_MKTSEGMENT
+FROM snow.tpch_sf1.customer c
+JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+WHERE n.N_REGIONKEY = 3
+  AND c.C_CUSTKEY BETWEEN 1 AND 50
+  AND c.C_MKTSEGMENT = 'BUILDING'
+ORDER BY c.C_CUSTKEY
+LIMIT 5;
+
+# Cleanup
+statement ok
+DETACH snow;
+
+statement ok
+DROP SECRET test_secret;

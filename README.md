@@ -748,13 +748,119 @@ SELECT * FROM snowflake_scan(
 );
 ```
 
+## Filter & Projection Pushdown
+
+The extension can optimize queries by pushing filters and column selections to Snowflake. **Pushdown is disabled by default** and must be explicitly enabled.
+
+### Enabling Pushdown
+
+Add `enable_pushdown true` to the ATTACH statement:
+
+```sql
+-- Pushdown DISABLED (default)
+ATTACH '' AS snow (TYPE snowflake, SECRET my_secret, READ_ONLY);
+
+-- Pushdown ENABLED
+ATTACH '' AS snow (TYPE snowflake, SECRET my_secret, READ_ONLY, enable_pushdown true);
+```
+
+### How Pushdown Works (when enabled)
+
+```sql
+ATTACH '' AS snow (TYPE snowflake, SECRET my_secret, READ_ONLY, enable_pushdown true);
+
+-- Simple filter and projection
+SELECT id, name FROM snow.schema.customers WHERE age > 25;
+-- Snowflake executes: SELECT "id", "name" FROM ... WHERE "age" > 25
+
+-- Complex filters with IN and OR
+SELECT * FROM snow.schema.orders
+WHERE status IN ('PENDING', 'PROCESSING')
+   OR (order_date >= '2024-01-01' AND order_date < '2024-02-01');
+-- All filters pushed to Snowflake
+
+-- Join queries with filter pushdown
+SELECT c.id, c.name, n.country_name
+FROM snow.schema.customers c
+JOIN snow.schema.nations n ON c.nation_id = n.id
+WHERE n.country_name = 'USA' AND c.id <= 1000;
+-- Static filters pushed to both tables
+```
+
+**Supported Pushdown:**
+- **Comparison filters**: `=`, `!=`, `<`, `>`, `<=`, `>=`, `IS NULL`, `IS NOT NULL`
+- **Logical operators**: `AND`, `OR` (including on same column)
+- **IN clauses**: `col IN (value1, value2, ...)` (converted to OR)
+- **Join queries**: Static join filters pushed, dynamic filters applied locally
+- **Projections**: Column selection to reduce data transfer
+
+**Important: DuckDB's Optimizer Controls Pushdown**
+
+When pushdown is enabled, DuckDB's query optimizer decides which filters to push down based on performance estimates. Not all filters in your query will necessarily be pushed to Snowflake:
+
+```sql
+-- With pushdown enabled
+ATTACH '' AS snow (TYPE snowflake, SECRET my_secret, READ_ONLY, enable_pushdown true);
+
+-- Query with multiple filters
+SELECT * FROM snow.schema.customer
+WHERE C_CUSTKEY > 100000 AND C_PHONE IS NOT NULL;
+
+-- DuckDB may push down: WHERE C_CUSTKEY > 100000
+-- DuckDB may apply locally: C_PHONE IS NOT NULL (cheap to evaluate after filtering)
+```
+
+This is **optimal behavior**. DuckDB keeps certain filters local when:
+- The filter is very cheap to evaluate (e.g., `IS NOT NULL`)
+- A prior filter already reduces the dataset significantly
+- Local evaluation is faster than remote execution
+
+The extension supports all standard comparison and null-check filters. DuckDB's optimizer will use them when it determines pushdown improves performance.
+
+### snowflake_scan (Pushdown Disabled)
+```sql
+-- User-provided SQL is executed as-is, no modification
+SELECT * FROM snowflake_scan('SELECT * FROM customers WHERE age > 25', 'my_secret');
+```
+
+Use `snowflake_scan()` when you need full control over the SQL sent to Snowflake.
+
 ## Limitations
 
 - **Read-only access**: All Snowflake operations are read-only
-- **Pushdown for Storage Attach**: Pushdown is not implemented for storage ATTACH, SELECT queries get all the data to duckdb before applying filters like WHERE clause
-- **Large result sets**: Should be filtered at source for optimal performance, consider using snowflake_scan
-- ****COUNT(\*)** like column alias operations are not supported until projection pushdown is implemented
+- **Function calls in filters**: Expressions like `WHERE UPPER(name) = 'FOO'` not pushed down
+- **LIMIT pushdown**: Not supported for `ATTACH` - LIMIT is applied after fetching data from Snowflake
 
+### Working with LIMIT
+
+When using `ATTACH`, LIMIT clauses are applied locally by DuckDB after fetching all data:
+
+```sql
+-- LIMIT applied locally (fetches all rows, then limits)
+SELECT * FROM snow.schema.customer LIMIT 100;
+```
+
+For efficient row sampling, use `snowflake_scan()` with Snowflake's native sampling:
+
+```sql
+-- Option 1: LIMIT pushed to Snowflake
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customer LIMIT 100',
+    'my_secret'
+);
+
+-- Option 2: Snowflake SAMPLE clause (recommended for large tables)
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customer SAMPLE (1000 ROWS)',
+    'my_secret'
+);
+
+-- Option 3: Percentage-based sampling
+SELECT * FROM snowflake_scan(
+    'SELECT * FROM customer SAMPLE (1)',  -- 1% of rows
+    'my_secret'
+);
+```
 
 ## Support
 
@@ -764,3 +870,6 @@ For issues or questions:
 - Review Snowflake ADBC driver documentation (https://arrow.apache.org/adbc/main/driver/snowflake.html)
 - Ensure you have the latest version of the extension
 
+### For Developers
+
+If you want to build the extension from source or contribute to development, see [BUILD.md](BUILD.md) for detailed build instructions and development guidelines.

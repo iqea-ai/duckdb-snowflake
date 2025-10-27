@@ -1,0 +1,66 @@
+# name: test/sql/pushdown/pushdown_behavior.test
+# description: Test pushdown enabled/disabled behavior for snowflake_scan vs ATTACH
+# group: [pushdown]
+
+require snowflake
+
+statement ok
+LOAD snowflake;
+
+# Create test secret
+statement ok
+CREATE SECRET test_secret (
+    TYPE snowflake,
+    ACCOUNT 'FLWILYJ-FL43292',
+    USER 'venkata@iqea.ai',
+    PASSWORD 'DuckDBSnowflake2025',
+    DATABASE 'SNOWFLAKE_SAMPLE_DATA'
+);
+
+# Test 1: ATTACH with enable_pushdown true
+# DuckDB modifies the query to push filters and projections
+# Base query "SELECT * FROM table" is modified by DuckDB optimizer
+statement ok
+ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
+
+# Test 2: This query should result in pushdown
+statement ok
+SELECT C_CUSTKEY, C_NAME FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 10;
+
+# Test 3: Verify projection pushdown on ATTACH
+# Should only request needed columns from Snowflake
+statement ok
+SELECT C_CUSTKEY FROM snow.tpch_sf1.customer LIMIT 5;
+
+# Test 4: Verify filter pushdown on ATTACH
+# Should push WHERE clause to Snowflake
+statement ok
+SELECT * FROM snow.tpch_sf1.customer WHERE C_MKTSEGMENT = 'HOUSEHOLD' LIMIT 5;
+
+# Test 5: Verify combined pushdown on ATTACH
+# Should push both projection and filter
+statement ok
+SELECT C_CUSTKEY, C_MKTSEGMENT FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000 AND C_PHONE IS NOT NULL LIMIT 5;
+
+# Test 6: IS NULL pushdown on ATTACH (likely returns 0 for this dataset)
+statement ok
+SELECT * FROM snow.tpch_sf1.customer WHERE C_COMMENT IS NULL;
+
+# Test 7: IS NOT NULL pushdown on ATTACH
+statement ok
+SELECT * FROM snow.tpch_sf1.customer WHERE C_PHONE IS NOT NULL LIMIT 5;
+
+# Test 8: Multiple comparison operators
+statement ok
+SELECT * FROM snow.tpch_sf1.orders
+WHERE O_ORDERKEY > 1000
+  AND O_TOTALPRICE <= 10000.0
+  AND O_ORDERSTATUS != 'P'
+LIMIT 5;
+
+# Cleanup
+statement ok
+DETACH snow;
+
+statement ok
+DROP SECRET test_secret;

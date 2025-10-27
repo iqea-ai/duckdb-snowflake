@@ -6,13 +6,16 @@
 namespace duckdb {
 namespace snowflake {
 
-SnowflakeCatalog::SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config)
-    : Catalog(db_p), client(SnowflakeClientManager::GetInstance().GetConnection(config)), schemas(*this, client) {
+SnowflakeCatalog::SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config,
+                                   const SnowflakeOptions &options_p)
+    : Catalog(db_p), client(SnowflakeClientManager::GetInstance().GetConnection(config)), schemas(*this, client),
+      options(options_p) {
 	DPRINT("SnowflakeCatalog constructor called\n");
 	if (!client || !client->IsConnected()) {
 		throw ConnectionException("Failed to connect to Snowflake");
 	}
-	DPRINT("SnowflakeCatalog connected successfully\n");
+	DPRINT("SnowflakeCatalog connected successfully with enable_pushdown=%s\n",
+	       options.enable_pushdown ? "true" : "false");
 }
 
 SnowflakeCatalog::~SnowflakeCatalog() {

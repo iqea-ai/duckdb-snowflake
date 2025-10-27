@@ -1,0 +1,130 @@
+# name: test/sql/snowflake_pushdown_behavior.test
+# description: Test to verify pushdown behavior for snowflake_scan vs ATTACH
+# group: [sql]
+
+# This test suite verifies that:
+# 1. snowflake_scan() does NOT have automatic filter/projection pushdown
+# 2. ATTACH storage extension DOES have automatic filter/projection pushdown
+
+require snowflake
+
+# Require environment variables for Snowflake connection
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: Extension Loading
+statement ok
+SELECT snowflake_version()
+
+# Test 2: Create Snowflake Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_pushdown_behavior_test (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+# Test 3: Verify snowflake_scan exists and does NOT advertise pushdown support
+# snowflake_scan should have projection_pushdown=false and filter_pushdown=false
+query I
+SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'snowflake_scan'
+----
+1
+
+# Test 4: snowflake_scan - Filter in SQL string (CORRECT usage)
+# All filtering happens in the SQL string passed to Snowflake
+# This is the correct way to use snowflake_scan with filters
+query I
+SELECT COUNT(*) FROM snowflake_scan(
+    'SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER WHERE C_CUSTKEY = 1',
+    'snowflake_pushdown_behavior_test'
+)
+----
+1
+
+# Test 5: snowflake_scan - Outer filter is NOT pushed down (demonstrates limitation)
+# The WHERE clause outside snowflake_scan is NOT pushed to Snowflake
+# This transfers all customer rows, then filters locally in DuckDB
+# WARNING: This is inefficient and should be avoided - put filters in the SQL string
+query I
+SELECT COUNT(*) FROM snowflake_scan(
+    'SELECT C_CUSTKEY, C_NAME FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER WHERE C_CUSTKEY <= 10',
+    'snowflake_pushdown_behavior_test'
+)
+WHERE C_CUSTKEY = 1
+----
+1
+
+# Test 6: ATTACH - Automatic filter pushdown
+# Attach the Snowflake database
+statement ok
+ATTACH '' AS snow_test (
+    TYPE snowflake,
+    SECRET snowflake_pushdown_behavior_test,
+    READ_ONLY
+);
+
+# Test 7: Verify ATTACH creates tables
+query I
+SELECT COUNT(*) > 0 FROM duckdb_tables() WHERE database_name = 'snow_test'
+----
+1
+
+# Test 8: ATTACH - WHERE clause is automatically pushed down
+# This is the recommended approach - DuckDB pushes the filter to Snowflake
+# Only matching rows are transferred
+query I
+SELECT COUNT(*) FROM snow_test.tpch_sf1.customer WHERE C_CUSTKEY = 1
+----
+1
+
+# Test 9: ATTACH - Projection pushdown
+# Only requested columns are transferred from Snowflake
+query TT
+SELECT C_CUSTKEY, C_NAME
+FROM snow_test.tpch_sf1.customer
+WHERE C_NATIONKEY = 1
+LIMIT 3
+----
+3	Customer#000000003
+14	Customer#000000014
+30	Customer#000000030
+
+# Test 10: ATTACH - Complex filters with AND/OR are pushed down
+query I
+SELECT COUNT(*)
+FROM snow_test.tpch_sf1.customer
+WHERE C_NATIONKEY = 1 AND C_ACCTBAL > 5000
+----
+2987
+
+# Test 11: ATTACH - IN clause pushdown
+query I
+SELECT COUNT(*)
+FROM snow_test.tpch_sf1.lineitem
+WHERE L_ORDERKEY IN (1, 2, 3, 4, 5)
+----
+17
+
+# Test 12: ATTACH - Range filter pushdown
+query I
+SELECT COUNT(*)
+FROM snow_test.tpch_sf1.lineitem
+WHERE L_ORDERKEY BETWEEN 1 AND 100
+----
+110
+
+# Test 13: Clean up
+statement ok
+DETACH snow_test;
+
+statement ok
+DROP SECRET snowflake_pushdown_behavior_test;

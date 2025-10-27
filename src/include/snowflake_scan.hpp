@@ -24,6 +24,11 @@ struct SnowflakeScanBindData : public ArrowScanFunctionData {
 
 } // namespace snowflake
 
+// Get the snowflake_scan table function (pushdown disabled - user controls query)
 TableFunction GetSnowflakeScanFunction();
+
+// Get the table scan function for ATTACH
+// enable_pushdown: whether to enable filter and projection pushdown
+TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown);
 
 } // namespace duckdb

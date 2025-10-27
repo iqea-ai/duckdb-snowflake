@@ -1,4 +1,5 @@
 #include "storage/snowflake_table_entry.hpp"
+#include "storage/snowflake_catalog.hpp"
 #include "snowflake_debug.hpp"
 #include "snowflake_client_manager.hpp"
 #include "snowflake_scan.hpp"
@@ -26,9 +27,19 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	auto factory = make_uniq<SnowflakeArrowStreamFactory>(connection, query);
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
+	// Apply pushdown settings from catalog options
+	auto &snowflake_catalog = catalog.Cast<SnowflakeCatalog>();
+	const auto &catalog_options = snowflake_catalog.GetOptions();
+	factory->filter_pushdown_enabled = catalog_options.enable_pushdown;
+	factory->projection_pushdown_enabled = catalog_options.enable_pushdown;
+	DPRINT("SnowflakeTableEntry: Pushdown %s (enable_pushdown=%s)\n",
+	       catalog_options.enable_pushdown ? "ENABLED" : "DISABLED",
+	       catalog_options.enable_pushdown ? "true" : "false");
+
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
-	// TODO remove below line after implementing projection pushdown
-	snowflake_bind_data->projection_pushdown_enabled = false;
+
+	// Set pushdown settings on bind_data (critical for avoiding crashes!)
+	snowflake_bind_data->projection_pushdown_enabled = catalog_options.enable_pushdown;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
 	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
@@ -44,6 +55,9 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	return_types = snowflake_bind_data->arrow_table.GetTypes();
 	snowflake_bind_data->all_types = return_types;
 
+	// Set column names on factory for filter building (maps column indices to names)
+	snowflake_bind_data->factory->column_names = names;
+
 	// Populate columns if not already loaded (first time accessing this table)
 	if (!columns_loaded) {
 		for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
@@ -56,8 +70,9 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: Setting bind_data at %p\n", (void *)snowflake_bind_data.get());
 	bind_data = std::move(snowflake_bind_data);
 
-	DPRINT("SnowflakeTableEntry: Returning GetSnowflakeScanFunction\n");
-	return GetSnowflakeScanFunction();
+	DPRINT("SnowflakeTableEntry: Returning GetSnowflakeTableScanFunction (pushdown %s)\n",
+	       catalog_options.enable_pushdown ? "enabled" : "disabled");
+	return GetSnowflakeTableScanFunction(catalog_options.enable_pushdown);
 }
 
 unique_ptr<BaseStatistics> SnowflakeTableEntry::GetStatistics(ClientContext &context, column_t column_id) {

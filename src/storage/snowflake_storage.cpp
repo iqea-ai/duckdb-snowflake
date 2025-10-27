@@ -49,8 +49,34 @@ static unique_ptr<Catalog> SnowflakeAttach(optional_ptr<StorageExtensionInfo> st
 		throw NotImplementedException("Snowflake currently only supports read-only access");
 	}
 
+	// Parse enable_pushdown option
+	SnowflakeOptions snowflake_options;
+	snowflake_options.access_mode = options.access_mode;
+
+	auto pushdown_entry = info.options.find("enable_pushdown");
+	if (pushdown_entry == info.options.end()) {
+		pushdown_entry = info.options.find("ENABLE_PUSHDOWN");
+	}
+
+	if (pushdown_entry != info.options.end()) {
+		string pushdown_value = pushdown_entry->second.ToString();
+		// Parse boolean value (supports "true", "1", "false", "0")
+		if (pushdown_value == "true" || pushdown_value == "TRUE" || pushdown_value == "1") {
+			snowflake_options.enable_pushdown = true;
+			DPRINT("Pushdown ENABLED by user option\n");
+		} else if (pushdown_value == "false" || pushdown_value == "FALSE" || pushdown_value == "0") {
+			snowflake_options.enable_pushdown = false;
+			DPRINT("Pushdown DISABLED by user option\n");
+		} else {
+			throw InvalidInputException("Invalid value for enable_pushdown: '%s'. Expected true/false or 1/0.",
+			                            pushdown_value.c_str());
+		}
+	} else {
+		DPRINT("Pushdown DISABLED by default (no enable_pushdown option provided)\n");
+	}
+
 	DPRINT("Creating SnowflakeCatalog\n");
-	return make_uniq<SnowflakeCatalog>(db, config);
+	return make_uniq<SnowflakeCatalog>(db, config, snowflake_options);
 }
 
 SnowflakeStorageExtension::SnowflakeStorageExtension() {
