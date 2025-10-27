@@ -17,63 +17,63 @@ require-env SNOWFLAKE_DATABASE
 statement ok
 ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
 
-# Test 1.1: snowflake_scan function - empty connection string
+# Test 1.1: snowflake_query function - empty connection string
 statement error
-SELECT * FROM snowflake_scan('', 'SELECT 1');
+SELECT * FROM snowflake_query('', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.2: snowflake_scan function - missing account
+# Test 1.2: snowflake_query function - missing account
 statement error
-SELECT * FROM snowflake_scan('user=test;password=test', 'SELECT 1');
+SELECT * FROM snowflake_query('user=test;password=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.3: snowflake_scan function - missing user
+# Test 1.3: snowflake_query function - missing user
 statement error
-SELECT * FROM snowflake_scan('account=test;password=test', 'SELECT 1');
+SELECT * FROM snowflake_query('account=test;password=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.4: snowflake_scan function - missing password
+# Test 1.4: snowflake_query function - missing password
 statement error
-SELECT * FROM snowflake_scan('account=test;user=test', 'SELECT 1');
+SELECT * FROM snowflake_query('account=test;user=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.5: snowflake_scan function - invalid credentials
+# Test 1.5: snowflake_query function - invalid credentials
 statement error
-SELECT * FROM snowflake_scan('account=test;user=test;password=test;warehouse=test', 'SELECT 1');
+SELECT * FROM snowflake_query('account=test;user=test;password=test;warehouse=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.6: snowflake_scan function - connection string with special characters
+# Test 1.6: snowflake_query function - connection string with special characters
 statement error
-SELECT * FROM snowflake_scan('account=test;user=test@domain.com;password=p@ssw0rd!;warehouse=test', 'SELECT 1');
+SELECT * FROM snowflake_query('account=test;user=test@domain.com;password=p@ssw0rd!;warehouse=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.7: snowflake_scan function - case sensitivity in connection parameters
+# Test 1.7: snowflake_query function - case sensitivity in connection parameters
 statement error
-SELECT * FROM snowflake_scan('ACCOUNT=test;USER=test;PASSWORD=test;WAREHOUSE=test', 'SELECT 1');
+SELECT * FROM snowflake_query('ACCOUNT=test;USER=test;PASSWORD=test;WAREHOUSE=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.8: snowflake_scan function - connection string with extra semicolons
+# Test 1.8: snowflake_query function - connection string with extra semicolons
 statement error
-SELECT * FROM snowflake_scan('account=test;;user=test;password=test;;warehouse=test;', 'SELECT 1');
+SELECT * FROM snowflake_query('account=test;;user=test;password=test;;warehouse=test;', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.9: snowflake_scan function - empty parameter values
+# Test 1.9: snowflake_query function - empty parameter values
 statement error
-SELECT * FROM snowflake_scan('account=;user=test;password=test;warehouse=test', 'SELECT 1');
+SELECT * FROM snowflake_query('account=;user=test;password=test;warehouse=test', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 
-# Test 1.10: snowflake_scan function - whitespace in connection string
+# Test 1.10: snowflake_query function - whitespace in connection string
 statement error
-SELECT * FROM snowflake_scan('  account=test; user=test ; password=test ;warehouse=test  ', 'SELECT 1');
+SELECT * FROM snowflake_query('  account=test; user=test ; password=test ;warehouse=test  ', 'SELECT 1');
 ----
 Binder Error: Failed to retrieve credentials for profile 'SELECT 1'
 

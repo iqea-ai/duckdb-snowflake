@@ -1,8 +1,16 @@
 # name: test/sql/pushdown/pushdown_behavior.test
-# description: Test pushdown enabled/disabled behavior for snowflake_scan vs ATTACH
+# description: Test pushdown enabled/disabled behavior for snowflake_query vs ATTACH
 # group: [pushdown]
 
 require snowflake
+
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
 
 statement ok
 LOAD snowflake;
@@ -11,10 +19,10 @@ LOAD snowflake;
 statement ok
 CREATE SECRET test_secret (
     TYPE snowflake,
-    ACCOUNT 'FLWILYJ-FL43292',
-    USER 'venkata@iqea.ai',
-    PASSWORD 'DuckDBSnowflake2025',
-    DATABASE 'SNOWFLAKE_SAMPLE_DATA'
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}'
 );
 
 # Test 1: ATTACH with enable_pushdown true

@@ -19,7 +19,7 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	DPRINT("SnowflakeScanBind invoked\n");
 	// Validate parameters
 	if (input.inputs.size() < 2) {
-		throw BinderException("snowflake_scan requires at least 2 parameters: query and profile");
+		throw BinderException("snowflake_query requires at least 2 parameters: query and profile");
 	}
 
 	// Get query and profile
@@ -81,17 +81,17 @@ TableFunction GetSnowflakeScanFunction() {
 	// We only provide our own bind function to set up the Snowflake connection
 	// All other operations (init_global, init_local, scan) use DuckDB's implementation
 	// Parameters: query (VARCHAR), profile (VARCHAR)
-	TableFunction snowflake_scan("snowflake_scan", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                             ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
-	                             snowflake::SnowflakeScanBind,            // Our bind function
-	                             ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
-	                             ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
+	TableFunction snowflake_query("snowflake_query", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                              ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
+	                              snowflake::SnowflakeScanBind,            // Our bind function
+	                              ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
+	                              ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
 
-	// Disable pushdown for snowflake_scan - user provides the query explicitly
-	snowflake_scan.projection_pushdown = false;
-	snowflake_scan.filter_pushdown = false;
+	// Disable pushdown for snowflake_query - user provides the query explicitly
+	snowflake_query.projection_pushdown = false;
+	snowflake_query.filter_pushdown = false;
 
-	return snowflake_scan;
+	return snowflake_query;
 }
 
 TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {

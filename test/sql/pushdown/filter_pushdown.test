@@ -5,6 +5,14 @@
 # This test requires actual Snowflake credentials
 require snowflake
 
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
 statement ok
 LOAD snowflake;
 
@@ -12,10 +20,10 @@ LOAD snowflake;
 statement ok
 CREATE SECRET test_secret (
     TYPE snowflake,
-    ACCOUNT 'FLWILYJ-FL43292',
-    USER 'venkata@iqea.ai',
-    PASSWORD 'DuckDBSnowflake2025',
-    DATABASE 'SNOWFLAKE_SAMPLE_DATA'
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}'
 );
 
 # Attach Snowflake database with pushdown enabled

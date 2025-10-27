@@ -1,9 +1,9 @@
 # name: test/sql/snowflake_pushdown_behavior.test
-# description: Test to verify pushdown behavior for snowflake_scan vs ATTACH
+# description: Test to verify pushdown behavior for snowflake_query vs ATTACH
 # group: [sql]
 
 # This test suite verifies that:
-# 1. snowflake_scan() does NOT have automatic filter/projection pushdown
+# 1. snowflake_query() does NOT have automatic filter/projection pushdown
 # 2. ATTACH storage extension DOES have automatic filter/projection pushdown
 
 require snowflake
@@ -32,30 +32,30 @@ CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_pushdown_behavior_test (
     WAREHOUSE 'COMPUTE_WH'
 );
 
-# Test 3: Verify snowflake_scan exists and does NOT advertise pushdown support
-# snowflake_scan should have projection_pushdown=false and filter_pushdown=false
+# Test 3: Verify snowflake_query exists and does NOT advertise pushdown support
+# snowflake_query should have projection_pushdown=false and filter_pushdown=false
 query I
-SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'snowflake_scan'
+SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'snowflake_query'
 ----
 1
 
-# Test 4: snowflake_scan - Filter in SQL string (CORRECT usage)
+# Test 4: snowflake_query - Filter in SQL string (CORRECT usage)
 # All filtering happens in the SQL string passed to Snowflake
-# This is the correct way to use snowflake_scan with filters
+# This is the correct way to use snowflake_query with filters
 query I
-SELECT COUNT(*) FROM snowflake_scan(
+SELECT COUNT(*) FROM snowflake_query(
     'SELECT * FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER WHERE C_CUSTKEY = 1',
     'snowflake_pushdown_behavior_test'
 )
 ----
 1
 
-# Test 5: snowflake_scan - Outer filter is NOT pushed down (demonstrates limitation)
-# The WHERE clause outside snowflake_scan is NOT pushed to Snowflake
+# Test 5: snowflake_query - Outer filter is NOT pushed down (demonstrates limitation)
+# The WHERE clause outside snowflake_query is NOT pushed to Snowflake
 # This transfers all customer rows, then filters locally in DuckDB
 # WARNING: This is inefficient and should be avoided - put filters in the SQL string
 query I
-SELECT COUNT(*) FROM snowflake_scan(
+SELECT COUNT(*) FROM snowflake_query(
     'SELECT C_CUSTKEY, C_NAME FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER WHERE C_CUSTKEY <= 10',
     'snowflake_pushdown_behavior_test'
 )
