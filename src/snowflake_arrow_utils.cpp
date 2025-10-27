@@ -29,8 +29,8 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	auto factory = reinterpret_cast<SnowflakeArrowStreamFactory *>(factory_ptr);
 	DPRINT("SnowflakeProduceArrowScan: factory=%p, statement_initialized=%d\n", (void *)factory,
 	       factory->statement_initialized);
-	DPRINT("SnowflakeProduceArrowScan: pushdown enabled: filter=%d, projection=%d\n",
-	       factory->filter_pushdown_enabled, factory->projection_pushdown_enabled);
+	DPRINT("SnowflakeProduceArrowScan: pushdown enabled: filter=%d, projection=%d\n", factory->filter_pushdown_enabled,
+	       factory->projection_pushdown_enabled);
 	// Only log projected columns when projection pushdown is enabled
 	if (factory->projection_pushdown_enabled) {
 		DPRINT("SnowflakeProduceArrowScan: projected_columns.columns.size()=%llu\n",
@@ -84,7 +84,8 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	{
 		AdbcError set_error;
 		std::memset(&set_error, 0, sizeof(set_error));
-		AdbcStatusCode set_status = AdbcStatementSetSqlQuery(&factory->statement, factory->modified_query.c_str(), &set_error);
+		AdbcStatusCode set_status =
+		    AdbcStatementSetSqlQuery(&factory->statement, factory->modified_query.c_str(), &set_error);
 		DPRINT("Setting query on statement: %s\n", factory->modified_query.c_str());
 		if (set_status != ADBC_STATUS_OK) {
 			std::string error_msg = "Failed to set query: ";
@@ -179,7 +180,7 @@ void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema)
 }
 
 void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> &projection,
-                                                            TableFilterSet *filter_set) {
+                                                           TableFilterSet *filter_set) {
 	DPRINT("UpdatePushdownParameters called: projection_size=%lu, filter_count=%lu\n", projection.size(),
 	       filter_set ? filter_set->filters.size() : 0);
 
@@ -223,7 +224,7 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> 
 		// So we pass cols_to_project as the column mapping for filters.
 		vector<string> filter_column_names = cols_to_project.empty() ? column_names : cols_to_project;
 		modified_query = snowflake::SnowflakeQueryBuilder::BuildQuery(table_name, cols_to_project, filters_to_push,
-		                                                               filter_column_names);
+		                                                              filter_column_names);
 
 		DPRINT("Pushdown applied:\n  Original: %s\n  Modified: %s\n", query.c_str(), modified_query.c_str());
 

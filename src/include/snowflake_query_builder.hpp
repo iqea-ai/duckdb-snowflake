@@ -43,7 +43,7 @@ private:
 	//! Build WHERE clause expression from DuckDB filters
 	//! Returns nullptr if no filters
 	static unique_ptr<ParsedExpression> BuildWhereExpression(TableFilterSet *filter_set,
-	                                                          const vector<string> &column_names);
+	                                                         const vector<string> &column_names);
 
 	//! Transform a single DuckDB TableFilter to ParsedExpression
 	static unique_ptr<ParsedExpression> TransformFilter(const TableFilter &filter, const string &column_name);

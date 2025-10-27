@@ -103,7 +103,7 @@ TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {
 	// TableEntry provides bind_data directly, so we don't need parameters or a bind function
 	TableFunction table_scan("snowflake_table_scan", {},
 	                         ArrowTableFunction::ArrowScanFunction,   // Use DuckDB's scan
-	                         nullptr,                                  // No bind function needed
+	                         nullptr,                                 // No bind function needed
 	                         ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
 	                         ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
 

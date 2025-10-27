@@ -154,8 +154,7 @@ unique_ptr<ParsedExpression> SnowflakeQueryBuilder::TransformFilter(const TableF
 		auto &conj_filter = filter.Cast<ConjunctionAndFilter>();
 
 		if (conj_filter.child_filters.empty()) {
-			throw InternalException("CONJUNCTION_AND filter has no child filters for column '%s'",
-			                        column_name.c_str());
+			throw InternalException("CONJUNCTION_AND filter has no child filters for column '%s'", column_name.c_str());
 		}
 
 		// Recursively transform all child filters
@@ -219,8 +218,8 @@ unique_ptr<ParsedExpression> SnowflakeQueryBuilder::TransformFilter(const TableF
 		for (const auto &value : in_filter.values) {
 			auto col_ref = make_uniq<ColumnRefExpression>(column_name);
 			auto constant = make_uniq<ConstantExpression>(value);
-			auto comparison = make_uniq<ComparisonExpression>(ExpressionType::COMPARE_EQUAL,
-			                                                   std::move(col_ref), std::move(constant));
+			auto comparison =
+			    make_uniq<ComparisonExpression>(ExpressionType::COMPARE_EQUAL, std::move(col_ref), std::move(constant));
 			conditions.push_back(std::move(comparison));
 		}
 
@@ -238,8 +237,7 @@ unique_ptr<ParsedExpression> SnowflakeQueryBuilder::TransformFilter(const TableF
 		auto &conj_filter = filter.Cast<ConjunctionOrFilter>();
 
 		if (conj_filter.child_filters.empty()) {
-			throw InternalException("CONJUNCTION_OR filter has no child filters for column '%s'",
-			                        column_name.c_str());
+			throw InternalException("CONJUNCTION_OR filter has no child filters for column '%s'", column_name.c_str());
 		}
 
 		// Recursively transform all child filters
