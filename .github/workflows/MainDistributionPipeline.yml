@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   duckdb-main-build:
-    name: Build extension binaries
+    name: Build extension binaries (internal)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       duckdb_version: main
@@ -29,4 +29,102 @@ jobs:
       ci_tools_version: main
       extension_name: snowflake
       format_checks: 'format;tidy'
+
+  build-complete-packages:
+    name: Build complete extension package
+    needs: [duckdb-main-build, code-quality-check]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - name: linux_amd64
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+          - name: linux_arm64
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl
+          - name: linux_amd64_musl
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl
+          - name: osx_amd64
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-macosx_10_15_x86_64.whl
+          - name: osx_arm64
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-macosx_11_0_arm64.whl
+          - name: windows_amd64
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+          - name: windows_amd64_mingw
+            wheel: adbc_driver_snowflake-1.8.0-py3-none-win_amd64.whl
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snowflake-main-extension-${{ matrix.platform.name }}
+          path: ./extension-artifact
+
+      - name: Download ADBC driver
+        run: |
+          mkdir -p adbc_driver
+          cd adbc_driver
+          wget -q https://github.com/apache/arrow-adbc/releases/download/apache-arrow-adbc-20/${{ matrix.platform.wheel }}
+          unzip -q ${{ matrix.platform.wheel }}
+          echo "Contents of adbc_driver_snowflake directory:"
+          ls -lah adbc_driver_snowflake/
+          
+      - name: Create complete package
+        run: |
+          mkdir -p package/snowflake
+          
+          # Copy extension file
+          find extension-artifact -name "*.duckdb_extension" -exec cp {} package/snowflake/ \;
+          
+          # Copy ADBC driver (all wheels contain .so or .dll, we copy whatever exists)
+          if [[ "${{ matrix.platform.name }}" == windows* ]]; then
+            # Windows wheels contain .dll file
+            if [ -f adbc_driver/adbc_driver_snowflake/adbc_driver_snowflake.dll ]; then
+              cp adbc_driver/adbc_driver_snowflake/adbc_driver_snowflake.dll package/snowflake/
+            else
+              # Fallback - some Windows builds might still use .so naming
+              cp adbc_driver/adbc_driver_snowflake/*.so package/snowflake/ 2>/dev/null || \
+              cp adbc_driver/adbc_driver_snowflake/*.dll package/snowflake/
+            fi
+          else
+            cp adbc_driver/adbc_driver_snowflake/libadbc_driver_snowflake.so package/snowflake/
+          fi
+          
+          echo "Package contents before zipping:"
+          ls -lah package/snowflake/
+          
+          # Create zip archive
+          cd package
+          zip -r ../snowflake-extension-1.4-${{ matrix.platform.name }}.zip snowflake/
+          cd ..
+          
+          # Display package info
+          echo "Package contents:"
+          unzip -l snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          echo ""
+          echo "Package size:"
+          ls -lh snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          
+      - name: Validate package size
+        run: |
+          PACKAGE_SIZE=$(stat -f%z snowflake-extension-1.4-${{ matrix.platform.name }}.zip 2>/dev/null || stat -c%s snowflake-extension-1.4-${{ matrix.platform.name }}.zip)
+          MIN_SIZE=$((10 * 1024 * 1024))  # 10MB minimum (ADBC driver is ~20MB)
+          
+          if [ $PACKAGE_SIZE -lt $MIN_SIZE ]; then
+            echo "ERROR: Package size ($PACKAGE_SIZE bytes) is too small. Expected at least $MIN_SIZE bytes."
+            echo "This indicates the ADBC driver may be missing."
+            exit 1
+          fi
+          
+          echo "✓ Package size validation passed: $(echo "scale=2; $PACKAGE_SIZE / 1024 / 1024" | bc)MB"
+          
+      - name: Upload complete package
+        uses: actions/upload-artifact@v4
+        with:
+          name: snowflake-extension-1.4-${{ matrix.platform.name }}
+          path: snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          retention-days: 30
+          if-no-files-found: error
 
