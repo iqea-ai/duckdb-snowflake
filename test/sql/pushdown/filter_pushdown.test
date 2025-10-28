@@ -30,7 +30,18 @@ CREATE SECRET test_secret (
 statement ok
 ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
 
+# Enable profiling to measure pushdown effectiveness
+statement ok
+PRAGMA enable_profiling;
+
+statement ok
+PRAGMA profiling_output='filter_pushdown_profile.json';
+
 # Test 1: Simple equality filter (should return count > 0)
+# EXPLAIN should show filter pushed to Snowflake scan
+statement ok
+EXPLAIN SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_MKTSEGMENT = 'HOUSEHOLD';
+
 query I
 SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_MKTSEGMENT = 'HOUSEHOLD';
 ----
@@ -55,12 +66,20 @@ SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_COMMENT IS NULL;
 0
 
 # Test 6: IS NOT NULL filter (should return all rows = 150000)
+# EXPLAIN shows IS NOT NULL pushdown
+statement ok
+EXPLAIN SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_PHONE IS NOT NULL;
+
 query I
 SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_PHONE IS NOT NULL;
 ----
 150000
 
 # Test 7: Multiple filters (AND)
+# EXPLAIN shows compound filter pushdown
+statement ok
+EXPLAIN SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000 AND C_MKTSEGMENT = 'HOUSEHOLD';
+
 statement ok
 SELECT COUNT(*) FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100000 AND C_MKTSEGMENT = 'HOUSEHOLD';
 
@@ -69,6 +88,10 @@ statement ok
 SELECT C_CUSTKEY, C_NAME FROM snow.tpch_sf1.customer LIMIT 5;
 
 # Test 9: Projection + Filter (verify exact customer keys)
+# EXPLAIN shows both projection and filter pushdown
+statement ok
+EXPLAIN SELECT C_CUSTKEY, C_NAME, C_PHONE FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 3 ORDER BY C_CUSTKEY;
+
 query III
 SELECT C_CUSTKEY, C_NAME, C_PHONE FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 3 ORDER BY C_CUSTKEY;
 ----
@@ -85,6 +108,15 @@ SELECT C_CUSTKEY, C_MKTSEGMENT FROM snow.tpch_sf1.customer WHERE C_CUSTKEY > 100
 # Query 1: SELECT N_NATIONKEY, N_NAME FROM nation WHERE N_NAME = 'GERMANY' -> gets N_NATIONKEY=7
 # Query 2: SELECT C_NATIONKEY, C_CUSTKEY, C_NAME FROM customer WHERE C_NATIONKEY = 7 (pushed down!)
 # This demonstrates that DuckDB can push join filters to individual table scans
+# EXPLAIN shows join filter pushdown to both table scans
+statement ok
+EXPLAIN SELECT c.C_CUSTKEY, c.C_NAME, n.N_NAME
+FROM snow.tpch_sf1.customer c
+JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+WHERE n.N_NAME = 'GERMANY' AND c.C_CUSTKEY <= 100
+ORDER BY c.C_CUSTKEY
+LIMIT 3;
+
 query ITT
 SELECT c.C_CUSTKEY, c.C_NAME, n.N_NAME
 FROM snow.tpch_sf1.customer c
@@ -121,6 +153,13 @@ WHERE n.N_REGIONKEY = 3
   AND c.C_MKTSEGMENT = 'BUILDING'
 ORDER BY c.C_CUSTKEY
 LIMIT 5;
+
+# Disable profiling and view results
+statement ok
+PRAGMA disable_profiling;
+
+# Note: pragma_last_profiling_output() not available in DuckDB v1.4.0
+# Profile data is written to filter_pushdown_profile.json instead
 
 # Cleanup
 statement ok

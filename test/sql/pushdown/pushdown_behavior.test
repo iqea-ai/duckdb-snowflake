@@ -31,7 +31,18 @@ CREATE SECRET test_secret (
 statement ok
 ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
 
+# Enable profiling for pushdown comparison
+statement ok
+PRAGMA enable_profiling;
+
+statement ok
+PRAGMA profiling_output='pushdown_enabled_profile.json';
+
 # Test 2: This query should result in pushdown
+# EXPLAIN shows pushdown in action
+statement ok
+EXPLAIN SELECT C_CUSTKEY, C_NAME FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 10;
+
 statement ok
 SELECT C_CUSTKEY, C_NAME FROM snow.tpch_sf1.customer WHERE C_CUSTKEY <= 10;
 
@@ -59,6 +70,14 @@ statement ok
 SELECT * FROM snow.tpch_sf1.customer WHERE C_PHONE IS NOT NULL LIMIT 5;
 
 # Test 8: Multiple comparison operators
+# EXPLAIN shows multiple filter pushdown
+statement ok
+EXPLAIN SELECT * FROM snow.tpch_sf1.orders
+WHERE O_ORDERKEY > 1000
+  AND O_TOTALPRICE <= 10000.0
+  AND O_ORDERSTATUS != 'P'
+LIMIT 5;
+
 statement ok
 SELECT * FROM snow.tpch_sf1.orders
 WHERE O_ORDERKEY > 1000
@@ -66,9 +85,44 @@ WHERE O_ORDERKEY > 1000
   AND O_ORDERSTATUS != 'P'
 LIMIT 5;
 
-# Cleanup
+# Disable profiling for pushdown-enabled tests
+statement ok
+PRAGMA disable_profiling;
+
+# Cleanup pushdown-enabled attachment
 statement ok
 DETACH snow;
+
+# Test 9: Compare with PUSHDOWN DISABLED
+# Re-attach without pushdown to show performance difference
+statement ok
+ATTACH '' AS snow_no_push (TYPE snowflake, SECRET test_secret, READ_ONLY);
+
+# Enable profiling for comparison
+statement ok
+PRAGMA enable_profiling;
+
+statement ok
+PRAGMA profiling_output='pushdown_disabled_profile.json';
+
+# Test 10: Same query without pushdown
+# EXPLAIN should show filter applied locally in DuckDB
+statement ok
+EXPLAIN SELECT C_CUSTKEY, C_NAME FROM snow_no_push.tpch_sf1.customer WHERE C_CUSTKEY <= 10;
+
+statement ok
+SELECT C_CUSTKEY, C_NAME FROM snow_no_push.tpch_sf1.customer WHERE C_CUSTKEY <= 10;
+
+# Disable profiling
+statement ok
+PRAGMA disable_profiling;
+
+# Note: pragma_last_profiling_output() not available in DuckDB v1.4.0
+# Profile data is written to pushdown_disabled_profile.json instead
+
+# Cleanup
+statement ok
+DETACH snow_no_push;
 
 statement ok
 DROP SECRET test_secret;
