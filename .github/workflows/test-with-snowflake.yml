@@ -1,0 +1,63 @@
+name: Test with Snowflake
+on:
+  push:
+    branches: [main, stable]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-snowflake:
+    name: Test Snowflake Extension
+    runs-on: macos-latest
+    if: ${{ vars.SKIP_SNOWFLAKE_TESTS != 'true' }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+      
+      - name: Setup DuckDB version
+        run: |
+          cd duckdb
+          git checkout v1.4.0
+      
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja
+      
+      - name: Download ADBC Driver
+        run: |
+          bash scripts/download_adbc_driver.sh
+      
+      - name: Build extension
+        run: |
+          make release-build
+      
+      - name: Run Snowflake tests
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_ADBC_DRIVER_PATH: ${{ github.workspace }}/adbc_drivers/libadbc_driver_snowflake.so
+        run: |
+          # Verify environment variables are set
+          if [ -z "$SNOWFLAKE_ACCOUNT" ]; then
+            echo "⚠️  SNOWFLAKE_ACCOUNT secret not set - tests will be skipped"
+            exit 0
+          fi
+          
+          echo "Running Snowflake tests with credentials..."
+          make test_release
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/release/test/*.log
+            build/release/test/profiling_output_*.json
+
