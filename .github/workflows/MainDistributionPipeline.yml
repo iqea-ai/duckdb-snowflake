@@ -13,22 +13,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-test-config:
+    runs-on: ubuntu-latest
+    outputs:
+      test_config: ${{ steps.config.outputs.json }}
+    steps:
+      - name: Generate test config
+        id: config
+        run: |
+          echo 'json<<EOF' >> $GITHUB_OUTPUT
+          cat <<-JSON >> $GITHUB_OUTPUT
+          {
+            "test_env_variables": {
+              "SNOWFLAKE_ACCOUNT": "${{ secrets.SNOWFLAKE_ACCOUNT }}",
+              "SNOWFLAKE_USERNAME": "${{ secrets.SNOWFLAKE_USERNAME }}",
+              "SNOWFLAKE_PASSWORD": "${{ secrets.SNOWFLAKE_PASSWORD }}",
+              "SNOWFLAKE_DATABASE": "${{ secrets.SNOWFLAKE_DATABASE }}"
+            }
+          }
+          JSON
+          echo 'EOF' >> $GITHUB_OUTPUT
+
   duckdb-stable-build:
     name: Build extension binaries
+    needs: prepare-test-config
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       duckdb_version: v1.4.0
       ci_tools_version: main
       extension_name: snowflake
-      test_config: |
-        {
-          "test_env_variables": {
-            "SNOWFLAKE_ACCOUNT": "${{ secrets.SNOWFLAKE_ACCOUNT }}",
-            "SNOWFLAKE_USERNAME": "${{ secrets.SNOWFLAKE_USERNAME }}",
-            "SNOWFLAKE_PASSWORD": "${{ secrets.SNOWFLAKE_PASSWORD }}",
-            "SNOWFLAKE_DATABASE": "${{ secrets.SNOWFLAKE_DATABASE }}"
-          }
-        }
+      test_config: ${{ needs.prepare-test-config.outputs.test_config }}
     secrets: inherit
 
   code-quality-check:
