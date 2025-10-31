@@ -87,6 +87,9 @@ TableFunction GetSnowflakeScanFunction() {
 	                              ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
 	                              ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
 
+	// Add description for documentation
+	snowflake_query.description = "Execute a SQL query on Snowflake and return results as a table";
+
 	// Disable pushdown for snowflake_query - user provides the query explicitly
 	snowflake_query.projection_pushdown = false;
 	snowflake_query.filter_pushdown = false;
