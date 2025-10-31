@@ -32,33 +32,28 @@ namespace snowflake {
 //!   3. Leverages DuckDB's SQL serialization logic
 class SnowflakeQueryBuilder {
 public:
-  //! Build a complete SELECT query using AST construction
-  //! Input:
-  //!   - table_name: Qualified table name (e.g., "database.schema.table")
-  //!   - projection_columns: Columns to select (empty = SELECT *)
-  //!   - filter_set: DuckDB's pre-parsed filters
-  //!   - column_names: Maps column indices to names
-  //! Output: SQL string serialized from AST
-  static string BuildQuery(const string &table_name,
-                           const vector<string> &projection_columns,
-                           TableFilterSet *filter_set,
-                           const vector<string> &column_names);
+	//! Build a complete SELECT query using AST construction
+	//! Input:
+	//!   - table_name: Qualified table name (e.g., "database.schema.table")
+	//!   - projection_columns: Columns to select (empty = SELECT *)
+	//!   - filter_set: DuckDB's pre-parsed filters
+	//!   - column_names: Maps column indices to names
+	//! Output: SQL string serialized from AST
+	static string BuildQuery(const string &table_name, const vector<string> &projection_columns,
+	                         TableFilterSet *filter_set, const vector<string> &column_names);
 
 private:
-  //! Build WHERE clause expression from DuckDB filters
-  //! Returns nullptr if no filters
-  static unique_ptr<ParsedExpression>
-  BuildWhereExpression(TableFilterSet *filter_set,
-                       const vector<string> &column_names);
+	//! Build WHERE clause expression from DuckDB filters
+	//! Returns nullptr if no filters
+	static unique_ptr<ParsedExpression> BuildWhereExpression(TableFilterSet *filter_set,
+	                                                         const vector<string> &column_names);
 
-  //! Transform a single DuckDB TableFilter to ParsedExpression
-  static unique_ptr<ParsedExpression>
-  TransformFilter(const TableFilter &filter, const string &column_name);
+	//! Transform a single DuckDB TableFilter to ParsedExpression
+	static unique_ptr<ParsedExpression> TransformFilter(const TableFilter &filter, const string &column_name);
 
-  //! Build projection list (SELECT clause expressions)
-  //! Returns empty vector for SELECT *
-  static vector<unique_ptr<ParsedExpression>>
-  BuildProjectionList(const vector<string> &projection_columns);
+	//! Build projection list (SELECT clause expressions)
+	//! Returns empty vector for SELECT *
+	static vector<unique_ptr<ParsedExpression>> BuildProjectionList(const vector<string> &projection_columns);
 };
 
 } // namespace snowflake
