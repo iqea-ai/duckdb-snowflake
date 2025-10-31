@@ -201,12 +201,12 @@ SELECT snowflake_version();
 
 The DuckDB Snowflake extension supports multiple authentication methods:
 
-- **Password**: Standard username/password (simple setup, development)
-- **OAuth 2.0**: Token-based authentication (recommended for Okta/Auth0, headless environments)
-- **Key Pair**: RSA key-based authentication (production, highest security)
-- **External Browser (SAML 2.0)**: SSO with any SAML provider (Okta, Auth0, AD FS, Azure AD)
-- **Okta**: Native Okta integration
-- **MFA**: Multi-factor authentication
+- **Password**: Standard username/password (simple setup, development) - Tested
+- **OAuth 2.0**: Token-based authentication (recommended for Okta/Auth0, headless environments) - Known Issues
+- **Key Pair**: RSA key-based authentication (production, highest security, recommended) - Tested
+- **External Browser (SAML 2.0)**: SSO with any SAML provider (Okta, Auth0, AD FS, Azure AD) - Tested
+- **Okta**: Native Okta integration (Okta IdP only) - Implemented
+- **MFA**: Multi-factor authentication (interactive sessions only, not for programmatic use)
 
 **Quick Example (Password Auth):**
 ```sql
@@ -220,7 +220,9 @@ CREATE SECRET my_snowflake_secret (
 );
 ```
 
-📖 **For detailed setup instructions, configuration examples, and IdP integration guides, see [Authentication Documentation](docs/AUTHENTICATION.md)**
+**For detailed setup instructions, configuration examples, and IdP integration guides, see [Authentication Documentation](docs/AUTHENTICATION.md)**
+
+**For step-by-step setup of OAuth, Key Pair, Okta, and MFA authentication, see [Authentication Setup Guide](docs/AUTHENTICATION_SETUP.md)**
 
 ### Setting Up Snowflake Credentials
 

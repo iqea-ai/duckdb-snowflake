@@ -1,0 +1,123 @@
+┌─────────────────────────────────────┐
+│┌───────────────────────────────────┐│
+││    Query Profiling Information    ││
+│└───────────────────────────────────┘│
+└─────────────────────────────────────┘
+SELECT COUNT(*) = 5 FROM (     SELECT          lc.category_name,         SUM(CASE WHEN c.C_ACCTBAL > 0 THEN 1 ELSE 0 END) as positive_balance,         SUM(CASE WHEN c.C_ACCTBAL < 0 THEN 1 ELSE 0 END) as negative_balance     FROM snow.tpch_sf1.customer c     JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment     WHERE c.C_CUSTKEY BETWEEN 1 AND 10000     GROUP BY lc.category_name     HAVING positive_balance > 0 AND negative_balance > 0 );
+┌────────────────────────────────────────────────┐
+│┌──────────────────────────────────────────────┐│
+││              Total Time: 0.546s              ││
+│└──────────────────────────────────────────────┘│
+└────────────────────────────────────────────────┘
+┌───────────────────────────┐
+│           QUERY           │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│     (count_star() = 5)    │
+│                           │
+│           1 row           │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│    UNGROUPED_AGGREGATE    │
+│    ────────────────────   │
+│        Aggregates:        │
+│        count_star()       │
+│                           │
+│           1 row           │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│             42            │
+│                           │
+│           5 rows          │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│           FILTER          │
+│    ────────────────────   │
+│  ((positive_balance > 0)  │
+│  AND (negative_balance > 0│
+│             ))            │
+│                           │
+│           5 rows          │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_decompress_strin│
+│           g(#0)           │
+│             #1            │
+│             #2            │
+│                           │
+│           5 rows          │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│       HASH_GROUP_BY       │
+│    ────────────────────   │
+│         Groups: #0        │
+│                           │
+│        Aggregates:        │
+│          sum(#1)          │
+│          sum(#2)          │
+│                           │
+│           5 rows          │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│       category_name       │
+│ CASE  WHEN ((C_ACCTBAL > 0│
+│ .00)) THEN (1) ELSE 0 END │
+│ CASE  WHEN ((C_ACCTBAL < 0│
+│ .00)) THEN (1) ELSE 0 END │
+│                           │
+│        10,000 rows        │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         PROJECTION        │
+│    ────────────────────   │
+│__internal_compress_string_│
+│        uhugeint(#0)       │
+│             #1            │
+│                           │
+│        10,000 rows        │
+│          (0.00s)          │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│         HASH_JOIN         │
+│    ────────────────────   │
+│      Join Type: INNER     │
+│                           │
+│        Conditions:        ├──────────────┐
+│   segment = C_MKTSEGMENT  │              │
+│                           │              │
+│        10,000 rows        │              │
+│          (0.00s)          │              │
+└─────────────┬─────────────┘              │
+┌─────────────┴─────────────┐┌─────────────┴─────────────┐
+│         TABLE_SCAN        ││         TABLE_SCAN        │
+│    ────────────────────   ││    ────────────────────   │
+│           Table:          ││         Function:         │
+│      local_categories     ││    SNOWFLAKE_TABLE_SCAN   │
+│                           ││                           │
+│   Type: Sequential Scan   ││        Projections:       │
+│                           ││        C_MKTSEGMENT       │
+│        Projections:       ││         C_CUSTKEY         │
+│          segment          ││         C_ACCTBAL         │
+│       category_name       ││                           │
+│                           ││          Filters:         │
+│                           ││ C_CUSTKEY>=1 AND C_CUSTKEY│
+│                           ││          <=10000          │
+│                           ││                           │
+│           5 rows          ││        10,000 rows        │
+│          (0.00s)          ││          (0.06s)          │
+└───────────────────────────┘└───────────────────────────┘

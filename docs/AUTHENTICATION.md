@@ -2,16 +2,18 @@
 
 The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and infrastructure.
 
+**Quick Start**: For step-by-step setup instructions for OAuth, Key Pair, Okta, and MFA, see [AUTHENTICATION_SETUP.md](AUTHENTICATION_SETUP.md)
+
 ## Authentication Protocol Overview
 
 | Method | Protocol | Browser Required | Use Case | Status |
 |--------|----------|------------------|----------|--------|
-| **Password** | Username/Password | No | Development, simple setups | ✅ Tested |
-| **OAuth** | OAuth 2.0 | No | Programmatic access, APIs, automation, **recommended for Okta** | ✅ Implemented |
-| **Key Pair** | RSA Key Pair | No | Production, headless servers, highest security | ✅ Implemented |
-| **EXT_BROWSER** | SAML 2.0 | Yes | Interactive SSO, any SAML 2.0 IdP (Okta, AD FS) | ✅ Tested |
-| **OKTA** | Native Okta API | Yes | Okta-specific native integration | ✅ Implemented |
-| **MFA** | Password + MFA | No | Enhanced password security | ✅ Implemented |
+| **Password** | Username/Password | No | Development, simple setups | Tested |
+| **OAuth** | OAuth 2.0 | No | Programmatic access, APIs, automation, **recommended for Okta** | Known Issues |
+| **Key Pair** | RSA Key Pair | No | Production, headless servers, highest security | Tested |
+| **EXT_BROWSER** | SAML 2.0 | Yes | Interactive SSO, any SAML 2.0 IdP (Okta, AD FS) | Tested |
+| **OKTA** | Native Okta API | Yes | Okta-specific native integration (Okta IdP only) | Implemented |
+| **MFA** | Password + MFA | No | Enhanced password security (interactive only) | Not Suitable for Programmatic Use |
 
 **Important Notes:**
 - **For Okta users**: OAuth is recommended over EXT_BROWSER/SAML for better security, flexibility, and programmatic access
@@ -20,12 +22,13 @@ The DuckDB Snowflake extension supports multiple authentication methods to conne
 - **Browser-based methods** (EXT_BROWSER, OKTA) require interactive browser access and won't work in containerized/headless environments
 
 **Testing Status:**
-- **✅ Tested**: PASSWORD and EXT_BROWSER have been fully tested and verified working
-- **✅ Implemented**: OAuth, Key Pair, OKTA, and MFA are fully implemented but require external configuration:
-  - **OAuth**: Requires External OAuth integration configured in Snowflake (see setup instructions below)
-  - **Key Pair**: Requires RSA key pair generation and public key registration in Snowflake
-  - **OKTA**: Requires Okta URL configuration and Okta-specific setup
-  - **MFA**: Requires MFA-enabled Snowflake account
+- **Tested**: PASSWORD, EXT_BROWSER, and KEY_PAIR have been fully tested and verified working
+- **Not Suitable for Programmatic Use**: 
+  - **MFA**: Works for interactive browser sessions but not for programmatic connections (DuckDB, JDBC, ODBC). Error: "MFA methods are not supported for programmatic authentication." For secure programmatic access, use Key Pair instead.
+- **Known Issues**: 
+  - **OAuth**: Fully configured (Auth0 + Snowflake integration working with SnowSQL) but ADBC driver token validation fails. Tokens work correctly with SnowSQL but not with DuckDB/ADBC. Investigation needed.
+- **Implemented**: 
+  - **OKTA**: Native Okta API requires Okta as IdP (not compatible with Auth0). For Auth0 users, use EXT_BROWSER instead.
 
 ## 1. Password Authentication (Default)
 
@@ -52,6 +55,8 @@ account=myaccount;user=myusername;password=mypassword;database=mydb;warehouse=my
 Use **OAuth 2.0** tokens for authentication. **Recommended for Auth0/Okta environments** and ideal for programmatic access.
 
 **Protocol**: OAuth 2.0
+
+**Known Issue**: OAuth authentication is fully implemented and configured correctly (tokens work with SnowSQL), but the ADBC Snowflake driver currently fails to validate tokens when used through DuckDB. This is under investigation. For production use with Auth0/Okta, use **Key Pair** or **EXT_BROWSER** authentication instead.
 
 **Advantages**:
 - No browser required (works in headless/containerized environments)
@@ -164,9 +169,9 @@ The response will contain an `access_token` - use this as your `TOKEN` in the CR
 
 **Note**: For both Auth0 and Okta, ensure the token's `sub` or `email` claim matches the Snowflake user's `LOGIN_NAME`.
 
-## 3. Key Pair Authentication
+## 3. Key Pair Authentication (Tested)
 
-Use RSA key pairs for secure, password-less authentication.
+Use RSA key pairs for secure, password-less authentication. This is the recommended method for production environments and programmatic access.
 
 **Basic Key Pair (Unencrypted Private Key):**
 
@@ -323,6 +328,8 @@ SELECT SYSTEM$SHOW_SAML_IDP_METADATA('auth0_saml');
 
 Direct authentication with Okta using a custom Okta URL.
 
+**Important**: This authentication method only works if your organization uses **Okta** as the identity provider. It is **not compatible with Auth0**. If you are using Auth0, use **EXT_BROWSER** (SAML 2.0) authentication instead.
+
 ```sql
 CREATE SECRET my_okta_secret (
     TYPE snowflake,
@@ -342,7 +349,11 @@ account=myaccount;user=myusername;auth_type=okta;okta_url=https://yourcompany.ok
 
 ## 6. Multi-Factor Authentication (MFA)
 
-Authenticate using username, password, and MFA token.
+Authenticate using username, password, and MFA token. Provides enhanced security for password-based authentication.
+
+**Important Limitation**: MFA with TOTP authenticators (Google Authenticator, Duo Mobile, iCloud Keychain, etc.) is designed for **interactive browser sessions only** and does not work with programmatic connections like DuckDB, JDBC, ODBC, or Python connectors. Snowflake returns error: "MFA methods are not supported for programmatic authentication."
+
+**For programmatic access with high security, use Key Pair authentication instead**, which provides even stronger security than MFA and works seamlessly with DuckDB.
 
 ```sql
 CREATE SECRET my_mfa_secret (
