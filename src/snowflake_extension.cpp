@@ -36,7 +36,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
-	snowflake_version_function.description = "Returns the version of the Snowflake extension";
 	loader.RegisterFunction(std::move(snowflake_version_function));
 
 #ifdef ADBC_AVAILABLE
