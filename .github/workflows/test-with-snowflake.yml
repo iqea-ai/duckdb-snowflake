@@ -52,12 +52,14 @@ jobs:
           echo "Running Snowflake tests with credentials..."
           make test_release
       
-      - name: Upload test results
+      - name: Upload test results and profiling data
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: snowflake-test-results
           path: |
-            build/release/test/*.log
-            build/release/test/profiling_output_*.json
+            *_profile.json
+            profile_output.json
+          if-no-files-found: warn
+
 
