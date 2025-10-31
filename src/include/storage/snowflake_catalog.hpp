@@ -10,59 +10,68 @@ namespace snowflake {
 
 class SnowflakeCatalog : public Catalog {
 public:
-	// Constructor - connection info and options
-	SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config, const SnowflakeOptions &options_p);
+  // Constructor - connection info and options
+  SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config,
+                   const SnowflakeOptions &options_p);
 
-	~SnowflakeCatalog() override;
+  ~SnowflakeCatalog() override;
 
-	// Getter for options
-	const SnowflakeOptions &GetOptions() const {
-		return options;
-	}
+  // Getter for options
+  const SnowflakeOptions &GetOptions() const { return options; }
 
-	// Required overrides
-	void Initialize(bool load_builtin) override;
-	string GetCatalogType() override {
-		return "snowflake";
-	}
+  // Required overrides
+  void Initialize(bool load_builtin) override;
+  string GetCatalogType() override { return "snowflake"; }
 
-	// Schema operations (read-only)
-	void ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) override;
+  // Schema operations (read-only)
+  void ScanSchemas(ClientContext &context,
+                   std::function<void(SchemaCatalogEntry &)> callback) override;
 
-	optional_ptr<SchemaCatalogEntry> LookupSchema(CatalogTransaction transaction, const EntryLookupInfo &schema_lookup,
-	                                              OnEntryNotFound if_not_found) override;
+  optional_ptr<SchemaCatalogEntry>
+  LookupSchema(CatalogTransaction transaction,
+               const EntryLookupInfo &schema_lookup,
+               OnEntryNotFound if_not_found) override;
 
-	CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override {
-		if (type == CatalogType::TABLE_ENTRY) {
-			return CatalogLookupBehavior::STANDARD;
-		}
-		return CatalogLookupBehavior::NEVER_LOOKUP;
-	}
+  CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override {
+    if (type == CatalogType::TABLE_ENTRY) {
+      return CatalogLookupBehavior::STANDARD;
+    }
+    return CatalogLookupBehavior::NEVER_LOOKUP;
+  }
 
-	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;
+  optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction,
+                                          CreateSchemaInfo &info) override;
 
-	void DropSchema(ClientContext &context, DropInfo &info) override;
+  void DropSchema(ClientContext &context, DropInfo &info) override;
 
-	DatabaseSize GetDatabaseSize(ClientContext &context) override;
+  DatabaseSize GetDatabaseSize(ClientContext &context) override;
 
-	bool InMemory() override;
+  bool InMemory() override;
 
-	string GetDBPath() override;
+  string GetDBPath() override;
 
-	// Plan operations (not supported yet, read-only)
-	PhysicalOperator &PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner, LogicalCreateTable &op,
-	                                    PhysicalOperator &plan) override;
-	PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
-	                             optional_ptr<PhysicalOperator> plan) override;
-	PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
-	                             PhysicalOperator &plan) override;
-	PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
-	                             PhysicalOperator &plan) override;
+  // Plan operations (not supported yet, read-only)
+  PhysicalOperator &PlanCreateTableAs(ClientContext &context,
+                                      PhysicalPlanGenerator &planner,
+                                      LogicalCreateTable &op,
+                                      PhysicalOperator &plan) override;
+  PhysicalOperator &PlanInsert(ClientContext &context,
+                               PhysicalPlanGenerator &planner,
+                               LogicalInsert &op,
+                               optional_ptr<PhysicalOperator> plan) override;
+  PhysicalOperator &PlanDelete(ClientContext &context,
+                               PhysicalPlanGenerator &planner,
+                               LogicalDelete &op,
+                               PhysicalOperator &plan) override;
+  PhysicalOperator &PlanUpdate(ClientContext &context,
+                               PhysicalPlanGenerator &planner,
+                               LogicalUpdate &op,
+                               PhysicalOperator &plan) override;
 
 private:
-	shared_ptr<SnowflakeClient> client;
-	SnowflakeSchemaSet schemas;
-	SnowflakeOptions options;
+  shared_ptr<SnowflakeClient> client;
+  SnowflakeSchemaSet schemas;
+  SnowflakeOptions options;
 };
 } // namespace snowflake
 } // namespace duckdb

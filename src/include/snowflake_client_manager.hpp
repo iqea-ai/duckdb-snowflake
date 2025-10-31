@@ -12,16 +12,18 @@ namespace snowflake {
 
 class SnowflakeClientManager {
 public:
-	static SnowflakeClientManager &GetInstance();
+  static SnowflakeClientManager &GetInstance();
 
-	shared_ptr<SnowflakeClient> GetConnection(const SnowflakeConfig &config);
+  shared_ptr<SnowflakeClient> GetConnection(const SnowflakeConfig &config);
 
-	void ReleaseConnection(const SnowflakeConfig &config);
+  void ReleaseConnection(const SnowflakeConfig &config);
 
 private:
-	SnowflakeClientManager() = default;
-	std::unordered_map<SnowflakeConfig, shared_ptr<SnowflakeClient>, SnowflakeConfigHash> connections;
-	std::mutex connection_mutex;
+  SnowflakeClientManager() = default;
+  std::unordered_map<SnowflakeConfig, shared_ptr<SnowflakeClient>,
+                     SnowflakeConfigHash>
+      connections;
+  std::mutex connection_mutex;
 };
 
 } // namespace snowflake

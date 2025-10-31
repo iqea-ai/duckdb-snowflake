@@ -10,47 +10,48 @@ namespace duckdb {
 namespace snowflake {
 
 struct SnowflakeColumn {
-	string name;
-	LogicalType type;
-	bool is_nullable;
+  string name;
+  LogicalType type;
+  bool is_nullable;
 };
 
 class SnowflakeClient {
 public:
-	SnowflakeClient();
-	~SnowflakeClient();
+  SnowflakeClient();
+  ~SnowflakeClient();
 
-	void Connect(const SnowflakeConfig &config);
-	void Disconnect();
-	bool IsConnected() const;
-	bool TestConnection();
+  void Connect(const SnowflakeConfig &config);
+  void Disconnect();
+  bool IsConnected() const;
+  bool TestConnection();
 
-	AdbcConnection *GetConnection() {
-		return &connection;
-	}
-	AdbcDatabase *GetDatabase() {
-		return &database;
-	}
-	const SnowflakeConfig &GetConfig() const;
+  AdbcConnection *GetConnection() { return &connection; }
+  AdbcDatabase *GetDatabase() { return &database; }
+  const SnowflakeConfig &GetConfig() const;
 
-	vector<string> ListSchemas(ClientContext &context);
-	vector<string> ListTables(ClientContext &context, const string &schema);
-	vector<SnowflakeColumn> GetTableInfo(ClientContext &context, const string &schema, const string &table_name);
+  vector<string> ListSchemas(ClientContext &context);
+  vector<string> ListTables(ClientContext &context, const string &schema);
+  vector<SnowflakeColumn> GetTableInfo(ClientContext &context,
+                                       const string &schema,
+                                       const string &table_name);
 
 private:
-	SnowflakeConfig config;
-	AdbcDatabase database;
-	AdbcConnection connection;
-	bool connected = false;
+  SnowflakeConfig config;
+  AdbcDatabase database;
+  AdbcConnection connection;
+  bool connected = false;
 
-	vector<vector<string>> ExecuteAndGetStrings(ClientContext &context, const string &query,
-	                                            const vector<string> &expected_col_names);
-	unique_ptr<DataChunk> ExecuteAndGetChunk(ClientContext &context, const string &query,
-	                                         const vector<LogicalType> &expected_types,
-	                                         const vector<string> &expected_names);
-	void InitializeDatabase(const SnowflakeConfig &config);
-	void InitializeConnection();
-	void CheckError(const AdbcStatusCode status, const std::string &operation, AdbcError *error);
+  vector<vector<string>>
+  ExecuteAndGetStrings(ClientContext &context, const string &query,
+                       const vector<string> &expected_col_names);
+  unique_ptr<DataChunk>
+  ExecuteAndGetChunk(ClientContext &context, const string &query,
+                     const vector<LogicalType> &expected_types,
+                     const vector<string> &expected_names);
+  void InitializeDatabase(const SnowflakeConfig &config);
+  void InitializeConnection();
+  void CheckError(const AdbcStatusCode status, const std::string &operation,
+                  AdbcError *error);
 };
 
 } // namespace snowflake

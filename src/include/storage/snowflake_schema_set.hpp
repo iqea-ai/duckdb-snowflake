@@ -8,15 +8,15 @@ namespace duckdb {
 namespace snowflake {
 class SnowflakeSchemaSet : public SnowflakeCatalogSet {
 public:
-	SnowflakeSchemaSet(Catalog &catalog, shared_ptr<SnowflakeClient> client)
-	    : SnowflakeCatalogSet(catalog), client(std::move(client)) {
-	}
+  SnowflakeSchemaSet(Catalog &catalog, shared_ptr<SnowflakeClient> client)
+      : SnowflakeCatalogSet(catalog), client(std::move(client)) {}
 
-	//! Fetches all schemas from Snowflake and creates SnowflakeSchemaEntry objects for each
-	void LoadEntries(ClientContext &context) override;
+  //! Fetches all schemas from Snowflake and creates SnowflakeSchemaEntry
+  //! objects for each
+  void LoadEntries(ClientContext &context) override;
 
 private:
-	shared_ptr<SnowflakeClient> client;
+  shared_ptr<SnowflakeClient> client;
 };
 } // namespace snowflake
 } // namespace duckdb

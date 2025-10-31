@@ -11,81 +11,96 @@
 namespace duckdb {
 namespace snowflake {
 
-TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) {
-	DPRINT("SnowflakeTableEntry::GetScanFunction called for table %s.%s.%s\n", client->GetConfig().database.c_str(),
-	       schema.name.c_str(), name.c_str());
+TableFunction
+SnowflakeTableEntry::GetScanFunction(ClientContext &context,
+                                     unique_ptr<FunctionData> &bind_data) {
+  DPRINT("SnowflakeTableEntry::GetScanFunction called for table %s.%s.%s\n",
+         client->GetConfig().database.c_str(), schema.name.c_str(),
+         name.c_str());
 
-	auto &config = client->GetConfig();
-	string query = "SELECT * FROM " + config.database + "." + schema.name + "." + name;
-	DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
+  auto &config = client->GetConfig();
+  string query =
+      "SELECT * FROM " + config.database + "." + schema.name + "." + name;
+  DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
 
-	// TODO consider maintaining a thread-safe pool of connections in client, so we can use the client within
-	// SnowflakeTableEntry instead of creating a new client
-	auto &client_manager = SnowflakeClientManager::GetInstance();
-	auto connection = client_manager.GetConnection(config);
+  // TODO consider maintaining a thread-safe pool of connections in client, so
+  // we can use the client within SnowflakeTableEntry instead of creating a new
+  // client
+  auto &client_manager = SnowflakeClientManager::GetInstance();
+  auto connection = client_manager.GetConnection(config);
 
-	auto factory = make_uniq<SnowflakeArrowStreamFactory>(connection, query);
-	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
+  auto factory = make_uniq<SnowflakeArrowStreamFactory>(connection, query);
+  DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
-	// Apply pushdown settings from catalog options
-	auto &snowflake_catalog = catalog.Cast<SnowflakeCatalog>();
-	const auto &catalog_options = snowflake_catalog.GetOptions();
-	factory->filter_pushdown_enabled = catalog_options.enable_pushdown;
-	factory->projection_pushdown_enabled = catalog_options.enable_pushdown;
-	DPRINT("SnowflakeTableEntry: Pushdown %s (enable_pushdown=%s)\n",
-	       catalog_options.enable_pushdown ? "ENABLED" : "DISABLED",
-	       catalog_options.enable_pushdown ? "true" : "false");
+  // Apply pushdown settings from catalog options
+  auto &snowflake_catalog = catalog.Cast<SnowflakeCatalog>();
+  const auto &catalog_options = snowflake_catalog.GetOptions();
+  factory->filter_pushdown_enabled = catalog_options.enable_pushdown;
+  factory->projection_pushdown_enabled = catalog_options.enable_pushdown;
+  DPRINT("SnowflakeTableEntry: Pushdown %s (enable_pushdown=%s)\n",
+         catalog_options.enable_pushdown ? "ENABLED" : "DISABLED",
+         catalog_options.enable_pushdown ? "true" : "false");
 
-	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
+  auto snowflake_bind_data =
+      make_uniq<SnowflakeScanBindData>(std::move(factory));
 
-	// Set pushdown settings on bind_data (critical for avoiding crashes!)
-	snowflake_bind_data->projection_pushdown_enabled = catalog_options.enable_pushdown;
+  // Set pushdown settings on bind_data (critical for avoiding crashes!)
+  snowflake_bind_data->projection_pushdown_enabled =
+      catalog_options.enable_pushdown;
 
-	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
-	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
-	                        snowflake_bind_data->schema_root.arrow_schema);
-	DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
+  DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
+  SnowflakeGetArrowSchema(
+      reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
+      snowflake_bind_data->schema_root.arrow_schema);
+  DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
 
-	// Use the new DuckDB API to populate the arrow table schema
-	vector<string> names;
-	vector<LogicalType> return_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
-	                                             snowflake_bind_data->schema_root.arrow_schema);
-	names = snowflake_bind_data->arrow_table.GetNames();
-	return_types = snowflake_bind_data->arrow_table.GetTypes();
-	snowflake_bind_data->all_types = return_types;
+  // Use the new DuckDB API to populate the arrow table schema
+  vector<string> names;
+  vector<LogicalType> return_types;
+  ArrowTableFunction::PopulateArrowTableSchema(
+      DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
+      snowflake_bind_data->schema_root.arrow_schema);
+  names = snowflake_bind_data->arrow_table.GetNames();
+  return_types = snowflake_bind_data->arrow_table.GetTypes();
+  snowflake_bind_data->all_types = return_types;
 
-	// Set column names on factory for filter building (maps column indices to names)
-	snowflake_bind_data->factory->column_names = names;
+  // Set column names on factory for filter building (maps column indices to
+  // names)
+  snowflake_bind_data->factory->column_names = names;
 
-	// Populate columns if not already loaded (first time accessing this table)
-	if (!columns_loaded) {
-		for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
-			DPRINT("  Column: %s, Type: %s\n", names[i].c_str(), return_types[i].ToString().c_str());
-			columns.AddColumn(ColumnDefinition(names[i], return_types[i]));
-		}
-		columns_loaded = true;
-	}
+  // Populate columns if not already loaded (first time accessing this table)
+  if (!columns_loaded) {
+    for (idx_t i = 0; i < static_cast<idx_t>(names.size()); i++) {
+      DPRINT("  Column: %s, Type: %s\n", names[i].c_str(),
+             return_types[i].ToString().c_str());
+      columns.AddColumn(ColumnDefinition(names[i], return_types[i]));
+    }
+    columns_loaded = true;
+  }
 
-	DPRINT("SnowflakeTableEntry: Setting bind_data at %p\n", (void *)snowflake_bind_data.get());
-	bind_data = std::move(snowflake_bind_data);
+  DPRINT("SnowflakeTableEntry: Setting bind_data at %p\n",
+         (void *)snowflake_bind_data.get());
+  bind_data = std::move(snowflake_bind_data);
 
-	DPRINT("SnowflakeTableEntry: Returning GetSnowflakeTableScanFunction (pushdown %s)\n",
-	       catalog_options.enable_pushdown ? "enabled" : "disabled");
-	return GetSnowflakeTableScanFunction(catalog_options.enable_pushdown);
+  DPRINT("SnowflakeTableEntry: Returning GetSnowflakeTableScanFunction "
+         "(pushdown %s)\n",
+         catalog_options.enable_pushdown ? "enabled" : "disabled");
+  return GetSnowflakeTableScanFunction(catalog_options.enable_pushdown);
 }
 
-unique_ptr<BaseStatistics> SnowflakeTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
-	throw NotImplementedException("Snowflake does not support getting statistics for tables");
+unique_ptr<BaseStatistics>
+SnowflakeTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
+  throw NotImplementedException(
+      "Snowflake does not support getting statistics for tables");
 }
 
 TableStorageInfo SnowflakeTableEntry::GetStorageInfo(ClientContext &context) {
-	TableStorageInfo result;
-	// Don't fetch row count to avoid ADBC statement conflicts
-	// Snowflake is read-only, so exact cardinality isn't critical
-	result.cardinality = 0;
-	result.index_info = vector<IndexInfo>();
-	return result;
+  TableStorageInfo result;
+  // Don't fetch row count to avoid ADBC statement conflicts
+  // Snowflake is read-only, so exact cardinality isn't critical
+  result.cardinality = 0;
+  result.index_info = vector<IndexInfo>();
+  return result;
 }
 
 } // namespace snowflake
