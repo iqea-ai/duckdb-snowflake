@@ -7,7 +7,7 @@ namespace snowflake {
 
 class SnowflakeStorageExtension : public StorageExtension {
 public:
-  SnowflakeStorageExtension();
+	SnowflakeStorageExtension();
 };
 
 } // namespace snowflake
