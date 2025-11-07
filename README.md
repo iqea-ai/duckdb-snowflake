@@ -8,18 +8,18 @@ A powerful DuckDB extension that enables seamless querying of Snowflake database
 
 ### Get the Latest Extension Build (v1.4.1)
 
-1. Download the artifacts for your platform from the latest successful run: [GitHub Actions – OAuth_KeyPair_SAML](https://github.com/iqea-ai/duckdb-snowflake/actions/runs/18735204247)
-2. Copy both `snowflake.duckdb_extension` and `libadbc_driver_snowflake.so` to `~/.duckdb/extensions/v1.4.1/<platform>/`
-3. Start DuckDB 1.4.1 and verify the version:
+Install DuckDB 1.4.1 (or newer) and then install the Snowflake extension directly from the community repository:
 
-   ```sql
-   PRAGMA version;
-   -- Ensure the reported DuckDB version is 1.4.1 or newer
-   LOAD snowflake;
-   SELECT snowflake_version();
-   ```
+```sql
+INSTALL snowflake FROM community;
+LOAD snowflake;
+``` 
 
-If you see DuckDB 1.4.0 (or older), upgrade DuckDB before proceeding.
+Confirm your DuckDB version meets the requirement:
+
+```sql
+PRAGMA version;
+```
 
 ### Installation
 
@@ -130,7 +130,7 @@ The installer will:
 
 > **Tip:** When the script prompts for a version, specify `v1.4.1` to ensure advanced authentication and pushdown features are available.
 
-### Manual Installation
+### Manual Installation (advanced)
 
 If you prefer to install manually, download and install the appropriate driver for your platform:
 
@@ -444,12 +444,12 @@ WHERE n.country_name = 'USA' AND c.id <= 1000;
 -- Static filters pushed to both tables
 ```
 
-**Supported Pushdown:**
+**Supported Pushdown (current):**
 - **Comparison filters**: `=`, `!=`, `<`, `>`, `<=`, `>=`, `IS NULL`, `IS NOT NULL`
-- **Logical operators**: `AND`, `OR` (including on same column)
-- **IN clauses**: `col IN (value1, value2, ...)` (converted to OR)
-- **Join queries**: Static join filters pushed, dynamic filters applied locally
-- **Projections**: Column selection to reduce data transfer
+- **Logical operators**: `AND`, `OR`
+- **IN clauses**: `col IN (value1, value2, ...)` (converted to multiple OR conditions)
+
+**Not yet implemented:** join-filter pushdown and projection pushdown. These optimizations are on the roadmap but disabled in the current build.
 
 **Important: DuckDB's Optimizer Controls Pushdown**
 

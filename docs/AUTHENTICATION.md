@@ -1,6 +1,6 @@
 # Authentication Methods
 
-> **Version requirement:** The authentication methods described here (OAuth, key pair, Okta, EXT_BROWSER, MFA) require the Snowflake extension build for DuckDB **v1.4.1** or newer. Earlier releases do not register the necessary secret parameters. Download the v1.4.1 artifacts from the [`OAuth_KeyPair_SAML` GitHub Actions run](https://github.com/iqea-ai/duckdb-snowflake/actions/runs/18735204247) before following these steps.
+> **Version requirement:** The authentication methods described here (OAuth, key pair, Okta, EXT_BROWSER, MFA) require the Snowflake extension build for DuckDB **v1.4.1** or newer. Install DuckDB 1.4.1 and load the Snowflake extension from the community repository (`INSTALL snowflake FROM community;`) before following these steps.
 
 The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and infrastructure.
 
