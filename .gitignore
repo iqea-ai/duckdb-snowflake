@@ -15,3 +15,13 @@ adbc_drivers/libadbc_driver_snowflake.so
 .clang-format-ignore
 .env.example
 .vscode
+# Generated profiling/log artifacts
+*profile*.json
+build_output.log
+
+# Local auth testing scratch files
+AUTHENTICATION_STATUS.md
+AUTH_TESTING_SUMMARY.txt
+temp_private_key.pem
+test_join_query.sql
+test_oauth_keypair_saml.sql
