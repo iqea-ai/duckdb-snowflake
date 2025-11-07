@@ -1,5 +1,7 @@
 # Authentication Methods
 
+> **Version requirement:** The authentication methods described here (OAuth, key pair, Okta, EXT_BROWSER, MFA) require the Snowflake extension build for DuckDB **v1.4.1** or newer. Earlier releases do not register the necessary secret parameters. Download the v1.4.1 artifacts from the [`OAuth_KeyPair_SAML` GitHub Actions run](https://github.com/iqea-ai/duckdb-snowflake/actions/runs/18735204247) before following these steps.
+
 The DuckDB Snowflake extension supports multiple authentication methods to connect to Snowflake. Choose the method that best fits your security requirements and infrastructure.
 
 **Quick Start**: For step-by-step setup instructions for OAuth, Key Pair, Okta, and MFA, see [AUTHENTICATION_SETUP.md](AUTHENTICATION_SETUP.md)
@@ -186,6 +188,8 @@ CREATE SECRET my_keypair_secret (
     WAREHOUSE 'mywarehouse'
 );
 ```
+
+> You can supply either a filesystem path (recommended) or the PEM contents of the PKCS#8 private key in `PRIVATE_KEY`. If you omit the value entirely, the Snowflake driver will fail with: `trying to use keypair authentication, but PrivateKey was not provided in the driver config`.
 
 **Connection String:**
 ```
