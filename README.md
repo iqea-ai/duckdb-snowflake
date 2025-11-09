@@ -4,8 +4,6 @@ A powerful DuckDB extension that enables seamless querying of Snowflake database
 
 ## Quick Start
 
-> **Important:** Advanced authentication (OAuth, key pair, Okta, EXT_BROWSER) and filter/predicate pushdown require the Snowflake extension build for DuckDB **v1.4.1** or newer. Install the v1.4.1 artifacts from the `OAuth_KeyPair_SAML` GitHub Actions run before continuing.
-
 ### Get the Latest Extension Build (v1.4.1)
 
 Install DuckDB 1.4.1 (or newer) and then install the Snowflake extension directly from the community repository:
