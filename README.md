@@ -33,7 +33,7 @@ LOAD snowflake;
 -- 1. Create a Snowflake profile
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'your_account.snowflakecomputing.com',
+    ACCOUNT 'your_account_identifier',
     USER 'your_username',
     PASSWORD 'your_password',
     DATABASE 'your_database',
@@ -253,7 +253,7 @@ Create a named profile to securely store your Snowflake credentials:
 -- Secret with optional parameters (password authentication example)
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'adbniqz-ct69933',
+    ACCOUNT 'myaccountidentifier',
     USER 'myusername',
     PASSWORD 'mypassword',
     DATABASE 'mydatabase',
