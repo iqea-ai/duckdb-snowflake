@@ -35,7 +35,7 @@ LOAD snowflake;
 -- 1. Create a Snowflake profile
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'your_account.snowflakecomputing.com',
+    ACCOUNT 'your_account_identifier',
     USER 'your_username',
     PASSWORD 'your_password',
     DATABASE 'your_database',
@@ -227,11 +227,15 @@ The DuckDB Snowflake extension supports multiple authentication methods:
 - **Okta**: Native Okta integration (Okta IdP only) - Implemented
 - **MFA**: Multi-factor authentication (interactive sessions only, not for programmatic use)
 
+Note on account values:
+- Use your Snowflake account identifier (e.g., `myaccount` or `xy12345.us-east-1`) for `ACCOUNT` in all secrets and connection strings (Password, Key Pair, OAuth, MFA, EXT_BROWSER, OKTA).
+- Use the full Snowflake URL (`https://<account>.snowflakecomputing.com`) only in IdP configuration such as OAuth/SAML audience values.
+
 **Quick Example (Password Auth):**
 ```sql
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     PASSWORD 'mypassword',
     DATABASE 'mydatabase',
