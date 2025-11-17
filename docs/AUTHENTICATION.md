@@ -22,6 +22,7 @@ The DuckDB Snowflake extension supports multiple authentication methods to conne
 - **EXT_BROWSER uses SAML 2.0**: Works with any SAML 2.0-compliant identity provider including Okta, AD FS, Azure AD
 - **OAuth uses OAuth 2.0**: Ideal for headless environments, automation, and modern applications
 - **Browser-based methods** (EXT_BROWSER, OKTA) require interactive browser access and won't work in containerized/headless environments
+ - **Account value convention**: Use the Snowflake account identifier (e.g., `myaccount` or `xy12345.us-east-1`) for `ACCOUNT` in all secrets and connection strings (Password, Key Pair, OAuth, MFA, EXT_BROWSER, OKTA). Use the full Snowflake URL (`https://<account>.snowflakecomputing.com`) only in IdP configuration such as OAuth/SAML audience values.
 
 **Testing Status:**
 - **Tested**: PASSWORD, EXT_BROWSER, and KEY_PAIR have been fully tested and verified working
@@ -39,7 +40,7 @@ Standard username and password authentication.
 ```sql
 CREATE SECRET my_snowflake_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     PASSWORD 'mypassword',
     DATABASE 'mydatabase',
@@ -72,7 +73,7 @@ Use **OAuth 2.0** tokens for authentication. **Recommended for Auth0/Okta enviro
 ```sql
 CREATE SECRET my_oauth_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'your_user_or_client_id@clients',
     AUTH_TYPE 'oauth',
     TOKEN 'your_oauth_access_token',
@@ -180,7 +181,7 @@ Use RSA key pairs for secure, password-less authentication. This is the recommen
 ```sql
 CREATE SECRET my_keypair_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     AUTH_TYPE 'key_pair',
     PRIVATE_KEY '/path/to/rsa_key.p8',
@@ -203,7 +204,7 @@ For enhanced security, use a passphrase-protected private key (PKCS#8 format).
 ```sql
 CREATE SECRET my_secure_keypair_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     AUTH_TYPE 'key_pair',
     PRIVATE_KEY '/path/to/encrypted_rsa_key.p8',
@@ -250,7 +251,7 @@ Authenticate using your web browser with **SAML 2.0** identity providers (Auth0,
 ```sql
 CREATE SECRET my_sso_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     DATABASE 'mydatabase',
     WAREHOUSE 'mywarehouse',
     AUTH_TYPE 'ext_browser'
@@ -337,7 +338,7 @@ Direct authentication with Okta using a custom Okta URL.
 ```sql
 CREATE SECRET my_okta_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     AUTH_TYPE 'okta',
     OKTA_URL 'https://yourcompany.okta.com',
@@ -362,7 +363,7 @@ Authenticate using username, password, and MFA token. Provides enhanced security
 ```sql
 CREATE SECRET my_mfa_secret (
     TYPE snowflake,
-    ACCOUNT 'myaccount.snowflakecomputing.com',
+    ACCOUNT 'myaccount',
     USER 'myusername',
     PASSWORD 'mypassword',
     AUTH_TYPE 'mfa',

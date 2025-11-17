@@ -10,6 +10,10 @@ This guide provides step-by-step instructions for setting up all authentication 
 
 ---
 
+Note on account values:
+- For all authentication methods (Password, Key Pair, OAuth, MFA, EXT_BROWSER, OKTA), use your Snowflake account identifier (e.g., `myaccount` or `xy12345.us-east-1`) as the `ACCOUNT` value in secrets and connection strings.
+- Use the full Snowflake URL (`https://<account>.snowflakecomputing.com`) only in IdP configuration such as OAuth/SAML audience values.
+
 ## 1. OAuth 2.0 Authentication with Auth0
 
 ### Step 1: Configure Auth0
@@ -110,7 +114,7 @@ Response:
 ```sql
 CREATE SECRET snowflake_oauth (
     TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT.snowflakecomputing.com',
+    ACCOUNT 'YOUR_ACCOUNT_IDENTIFIER',
     USER 'auth0|YOUR_CLIENT_ID',
     AUTH_TYPE 'oauth',
     TOKEN 'YOUR_ACCESS_TOKEN',
@@ -192,7 +196,7 @@ DESC USER YOUR_USERNAME;
 ```sql
 CREATE SECRET snowflake_keypair (
     TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT.snowflakecomputing.com',
+    ACCOUNT 'YOUR_ACCOUNT_IDENTIFIER',
     USER 'YOUR_USERNAME',
     AUTH_TYPE 'key_pair',
     PRIVATE_KEY '/path/to/rsa_key.p8',
@@ -210,7 +214,7 @@ SELECT * FROM sf_keypair.information_schema.tables LIMIT 5;
 ```sql
 CREATE SECRET snowflake_keypair_unencrypted (
     TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT.snowflakecomputing.com',
+    ACCOUNT 'YOUR_ACCOUNT_IDENTIFIER',
     USER 'YOUR_USERNAME',
     AUTH_TYPE 'key_pair',
     PRIVATE_KEY '/path/to/rsa_key_unencrypted.p8',
@@ -265,7 +269,7 @@ GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PUBLIC;
 ```sql
 CREATE SECRET snowflake_okta (
     TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT.snowflakecomputing.com',
+    ACCOUNT 'YOUR_ACCOUNT_IDENTIFIER',
     USER 'okta_user@yourcompany.com',
     AUTH_TYPE 'okta',
     OKTA_URL 'https://yourcompany.okta.com',
@@ -328,7 +332,7 @@ GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PUBLIC;
 ```sql
 CREATE SECRET snowflake_mfa (
     TYPE snowflake,
-    ACCOUNT 'YOUR_ACCOUNT.snowflakecomputing.com',
+    ACCOUNT 'YOUR_ACCOUNT_IDENTIFIER',
     USER 'mfa_user',
     PASSWORD 'SECURE_PASSWORD',
     AUTH_TYPE 'mfa',
@@ -356,7 +360,7 @@ After setting up all authentication methods, use the comprehensive test:
 
 ```bash
 # Set all required environment variables
-export SNOWFLAKE_ACCOUNT="YOUR_ACCOUNT.snowflakecomputing.com"
+export SNOWFLAKE_ACCOUNT="YOUR_ACCOUNT_IDENTIFIER"
 export SNOWFLAKE_DATABASE="YOUR_DATABASE"
 
 # Password auth (already tested)
