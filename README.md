@@ -4,9 +4,9 @@ A powerful DuckDB extension that enables seamless querying of Snowflake database
 
 ## Quick Start
 
-### Get the Latest Extension Build (v1.4.1)
+### Get the Latest Extension Build (v1.4.2)
 
-Install DuckDB 1.4.1 (or newer) and then install the Snowflake extension directly from the community repository:
+Install DuckDB 1.4.2 (or newer) and then install the Snowflake extension directly from the community repository:
 
 ```sql
 INSTALL snowflake FROM community;
@@ -126,7 +126,7 @@ The installer will:
 - Install it to `~/.duckdb/extensions/<version>/<platform>/libadbc_driver_snowflake.so`
 - Verify the installation
 
-> **Tip:** When the script prompts for a version, specify `v1.4.1` to ensure advanced authentication and pushdown features are available.
+> **Tip:** When the script prompts for a version, specify `v1.4.2` to ensure advanced authentication and pushdown features are available.
 
 ### Manual Installation (advanced)
 
@@ -154,9 +154,9 @@ Replace `<PLATFORM>` with your platform directory from the table above:
 # 2. Extract the driver library
 unzip adbc_driver_snowflake-*.whl "adbc_driver_snowflake/*"
 
-# 3. Move to DuckDB extensions directory (DuckDB v1.4.1)
-mkdir -p ~/.duckdb/extensions/v1.4.1/<PLATFORM>
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.1/<PLATFORM>/
+# 3. Move to DuckDB extensions directory (DuckDB v1.4.2)
+mkdir -p ~/.duckdb/extensions/v1.4.2/<PLATFORM>
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.2/<PLATFORM>/
 
 # 4. Clean up
 rm -rf adbc_driver_snowflake adbc_driver_snowflake-*.whl
@@ -172,9 +172,9 @@ curl -L -o adbc_driver_snowflake.whl \
 # Extract
 unzip adbc_driver_snowflake.whl "adbc_driver_snowflake/*"
 
-# Install (DuckDB v1.4.1)
-mkdir -p ~/.duckdb/extensions/v1.4.1/linux_amd64
-mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.1/linux_amd64/
+# Install (DuckDB v1.4.2)
+mkdir -p ~/.duckdb/extensions/v1.4.2/linux_amd64
+mv adbc_driver_snowflake/libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.4.2/linux_amd64/
 
 # Clean up
 rm -rf adbc_driver_snowflake adbc_driver_snowflake.whl
@@ -198,9 +198,9 @@ move temp_extract\adbc_driver_snowflake\libadbc_driver_snowflake.so libadbc_driv
 rmdir /s temp_extract
 del adbc_driver_snowflake.zip
 
-# Place in DuckDB extensions directory (DuckDB v1.4.1)
-mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.4.1\windows_amd64
-move libadbc_driver_snowflake.so C:\Users\%USERNAME%\.duckdb\extensions\v1.4.1\windows_amd64\
+# Place in DuckDB extensions directory (DuckDB v1.4.2)
+mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.4.2\windows_amd64
+move libadbc_driver_snowflake.so C:\Users\%USERNAME%\.duckdb\extensions\v1.4.2\windows_amd64\
 ```
 
 ### Verification
@@ -409,7 +409,7 @@ COPY (
 
 The extension can optimize queries by pushing filters and column selections to Snowflake. **Pushdown is disabled by default** and must be explicitly enabled.
 
-> **Requires DuckDB 1.4.1 build of the Snowflake extension.** Earlier versions of the extension do not include the pushdown planner improvements referenced below.
+> **Requires DuckDB 1.4.2 build of the Snowflake extension.** Earlier versions of the extension do not include the pushdown planner improvements referenced below.
 
 ### Enabling Pushdown
 
