@@ -96,7 +96,7 @@ LOAD snowflake;
 
 ```bash
 # Download the pre-built extension
-wget https://github.com/your-org/duckdb-snowflake/releases/latest/download/snowflake.duckdb_extension
+wget https://github.com/iqea-ai/duckdb-snowflake/releases/latest/download/snowflake.duckdb_extension
 
 # Load in DuckDB
 LOAD 'path/to/snowflake.duckdb_extension';
