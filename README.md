@@ -2,6 +2,8 @@
 
 A powerful DuckDB extension that enables seamless querying of Snowflake databases using Arrow ADBC drivers. This extension provides efficient, columnar data transfer between DuckDB and Snowflake, making it ideal for analytics, ETL pipelines, and cross-database operations.
 
+**This extension works with DuckDB v1.4.2.**
+
 ## Quick Start
 
 ### Get the Latest Extension Build (v1.4.2)
@@ -92,15 +94,9 @@ LOAD snowflake;
 
 **Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
 
-### Method 2: Manual Installation
+### Method 2: Manual Installation (Build from Source)
 
-```bash
-# Download the pre-built extension
-wget https://github.com/your-org/duckdb-snowflake/releases/latest/download/snowflake.duckdb_extension
-
-# Load in DuckDB
-LOAD 'path/to/snowflake.duckdb_extension';
-```
+If you need to build the extension from source, see [BUILD.md](BUILD.md) for detailed build instructions.
 
 **Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
 
