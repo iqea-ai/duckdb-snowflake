@@ -3,6 +3,7 @@
 #include "snowflake_client.hpp"
 #include "snowflake_client_manager.hpp"
 #include "snowflake_config.hpp"
+#include "snowflake_debug.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -77,14 +78,13 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 
 		// Extract authentication-specific fields
 		auto auth_type_str = snowflake_secret->GetAuthType();
-		std::cerr << "[DEBUG] GetCredentials: auth_type_str = '" << auth_type_str << "'" << std::endl;
+		LOG_INFO("GetCredentials: auth_type_str = '%s'\n", auth_type_str.c_str());
 		if (!auth_type_str.empty()) {
 			// Parse auth_type string to enum
 			if (auth_type_str == "oauth") {
 				config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
 				config.oauth_token = snowflake_secret->GetToken();
-				std::cerr << "[DEBUG] Set auth_type to OAUTH, token length = " << config.oauth_token.length()
-				          << std::endl;
+				LOG_INFO("Set auth_type to OAUTH, token length = %zu\n", config.oauth_token.length());
 			} else if (auth_type_str == "key_pair") {
 				config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
 				config.private_key = snowflake_secret->GetPrivateKey();
@@ -98,7 +98,7 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 				config.auth_type = snowflake::SnowflakeAuthType::MFA;
 			}
 		} else {
-			std::cerr << "[DEBUG] auth_type_str is empty, using default PASSWORD auth" << std::endl;
+			LOG_INFO("auth_type_str is empty, using default PASSWORD auth\n");
 		}
 
 	} catch (const std::exception &e) {
