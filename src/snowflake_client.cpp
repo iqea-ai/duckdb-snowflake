@@ -430,9 +430,8 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
 
-	for (auto &schema : schemas) {
-		schema = StringUtil::Lower(schema);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	return schemas;
 }
@@ -447,9 +446,8 @@ vector<string> SnowflakeClient::ListTables(ClientContext &context, const string 
 	auto result = ExecuteAndGetStrings(context, table_name_query, {"table_name"});
 	auto table_names = result[0];
 
-	for (auto &table_name : table_names) {
-		table_name = StringUtil::Lower(table_name);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	DPRINT("ListTables returning %zu tables\n", table_names.size());
 	for (const auto &table_name : table_names) {
@@ -481,7 +479,9 @@ vector<SnowflakeColumn> SnowflakeClient::GetTableInfo(ClientContext &context, co
 	vector<SnowflakeColumn> col_data;
 
 	for (idx_t row_idx = 0; row_idx < result[0].size(); row_idx++) {
-		string column_name = StringUtil::Lower(result[0][row_idx]);
+		// Preserve original case from Snowflake (typically UPPERCASE)
+		// DuckDB handles case-insensitive column lookup internally
+		string column_name = result[0][row_idx];
 		string data_type = result[1][row_idx];
 		string nullable = result[2][row_idx];
 
