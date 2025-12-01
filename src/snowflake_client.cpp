@@ -166,7 +166,8 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 
 	if (driver_path.empty()) {
 		// Driver not found - provide helpful error message
-		std::string error_msg = std::string("ADBC Snowflake driver (") + SNOWFLAKE_ADBC_LIB + ") not found. Searched locations:\n";
+		std::string error_msg =
+		    std::string("ADBC Snowflake driver (") + SNOWFLAKE_ADBC_LIB + ") not found. Searched locations:\n";
 		for (const auto &path : search_paths) {
 			error_msg += "  - " + path + "\n";
 		}
