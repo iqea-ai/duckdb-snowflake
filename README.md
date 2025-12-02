@@ -80,12 +80,6 @@ The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capab
 
 ## Installation
 
-### Prerequisites
-
-The DuckDB Snowflake extension requires the `libadbc_driver_snowflake.so` library to function properly. This library is **not included** in the extension package and must be obtained separately.
-
-### Method 1: From DuckDB Community Extensions (Recommended)
-
 ```sql
 -- Install and load the extension
 INSTALL snowflake FROM community;
@@ -94,11 +88,7 @@ LOAD snowflake;
 
 **Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
 
-### Method 2: Manual Installation (Build from Source)
-
-If you need to build the extension from source, see [BUILD.md](BUILD.md) for detailed build instructions.
-
-**Note:** You still need to download the ADBC driver separately (see [ADBC Driver Setup](#adbc-driver-setup) below).
+**For Developers:** If you need to build the extension from source, see [BUILD.md](BUILD.md).
 
 ## ADBC Driver Setup
 
@@ -108,6 +98,7 @@ The Snowflake extension requires the Apache Arrow ADBC Snowflake driver to commu
 
 Use the automated installer script to download and install the correct ADBC driver for your platform:
 
+**Linux / macOS / WSL:**
 ```bash
 # Using curl
 curl -sSL https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/scripts/install-adbc-driver.sh | sh
@@ -116,13 +107,20 @@ curl -sSL https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/script
 wget -qO- https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/scripts/install-adbc-driver.sh | sh
 ```
 
+**Windows (PowerShell):**
+```powershell
+# Download and run the installer
+iwr -useb https://raw.githubusercontent.com/iqea-ai/duckdb-snowflake/main/scripts/install-adbc-driver.bat -OutFile install-adbc-driver.bat
+.\install-adbc-driver.bat
+```
+
 The installer will:
 - Detect your DuckDB version and platform automatically
 - Download the correct ADBC driver version
-- Install it to `~/.duckdb/extensions/<version>/<platform>/libadbc_driver_snowflake.so`
+- Install it to the appropriate directory:
+  - Linux/macOS: `~/.duckdb/extensions/<version>/<platform>/`
+  - Windows: `%USERPROFILE%\.duckdb\extensions\<version>\windows_amd64\`
 - Verify the installation
-
-> **Tip:** When the script prompts for a version, specify `v1.4.2` to ensure advanced authentication and pushdown features are available.
 
 ### Manual Installation (advanced)
 
@@ -130,13 +128,16 @@ If you prefer to install manually, download and install the appropriate driver f
 
 #### Supported Platforms
 
-| Platform | DuckDB Directory | Wheel File Suffix |
-|----------|------------------|-----------------|
-| **Linux x86_64** | `linux_amd64` | `manylinux1_x86_64.manylinux2014_x86_64...` |
-| **Linux ARM64** | `linux_arm64` | `manylinux2014_aarch64.manylinux_2_17_aarch64` |
-| **macOS x86_64** | `osx_amd64` | `macosx_10_15_x86_64` |
-| **macOS ARM64** | `osx_arm64` | `macosx_11_0_arm64` |
-| **Windows x86_64** | `windows_amd64` | `win_amd64` |
+| Platform | DuckDB Directory | Wheel File Suffix | Status |
+|----------|------------------|-----------------|--------|
+| **Linux x86_64** | `linux_amd64` | `manylinux1_x86_64.manylinux2014_x86_64...` | ✅ Supported |
+| **Linux ARM64** | `linux_arm64` | `manylinux2014_aarch64.manylinux_2_17_aarch64` | ✅ Supported |
+| **macOS x86_64** | `osx_amd64` | `macosx_10_15_x86_64` | ✅ Supported |
+| **macOS ARM64** | `osx_arm64` | `macosx_11_0_arm64` | ✅ Supported |
+| **Windows x86_64** | `windows_amd64` | `win_amd64` | ✅ Supported |
+| **Windows ARM64** | - | - | ❌ Not Available |
+
+> **Note:** Windows ARM64 is not currently supported by Apache ADBC. If you need Windows ARM64 support, you can build the driver from source or use x86_64 emulation.
 
 #### Generic Installation Steps - non windows
 

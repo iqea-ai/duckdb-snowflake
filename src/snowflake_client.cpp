@@ -165,14 +165,18 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	}
 
 	if (driver_path.empty()) {
-		// Use the filename and hope it's in the library path
-		driver_path = SNOWFLAKE_ADBC_LIB;
-		DPRINT("Driver not found in search paths, using: %s\n", driver_path.c_str());
+		// Driver not found - provide helpful error message
+		std::string error_msg =
+		    std::string("ADBC Snowflake driver (") + SNOWFLAKE_ADBC_LIB + ") not found. Searched locations:\n";
+		for (const auto &path : search_paths) {
+			error_msg += "  - " + path + "\n";
+		}
+
+		throw IOException(error_msg);
 	}
 
-	DPRINT("Snowflake ADBC Driver Loading:\n");
-	DPRINT("Extension directory: %s\n", extension_dir.c_str());
-	DPRINT("Final driver path: %s\n", driver_path.c_str());
+	LOG_INFO("Extension directory: %s\n", extension_dir.c_str());
+	LOG_INFO("Final adbc driver path: %s\n", driver_path.c_str());
 
 	status = AdbcDatabaseSetOption(&database, "driver", driver_path.c_str(), &error);
 	CheckError(status, "Failed to set Snowflake driver path", &error);
@@ -196,25 +200,25 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		break;
 	case SnowflakeAuthType::OAUTH:
 		// For External OAuth - use auth_oauth and provide token
-		std::cerr << "[DEBUG] Configuring OAuth authentication" << std::endl;
+		LOG_DEBUG("Configuring OAuth authentication\n");
 
 		// Set auth_type to 'auth_oauth' - this is the correct ADBC parameter
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
 		CheckError(status, "Failed to set OAuth auth type", &error);
-		std::cerr << "[DEBUG] Set auth_type=auth_oauth" << std::endl;
+		LOG_DEBUG("Set auth_type=auth_oauth\n");
 
 		// Set the OAuth token
 		if (!config.oauth_token.empty()) {
-			std::cerr << "[DEBUG] Setting token (length: " << config.oauth_token.length() << ")" << std::endl;
+			LOG_DEBUG("Setting token (length: %zu)\n", config.oauth_token.length());
 			status =
 			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
 			CheckError(status, "Failed to set OAuth token", &error);
-			std::cerr << "[DEBUG] Token set successfully" << std::endl;
+			LOG_DEBUG("Token set successfully\n");
 		}
 
 		// Username may still be needed for user mapping
 		if (!config.username.empty()) {
-			std::cerr << "[DEBUG] Setting username: " << config.username << std::endl;
+			LOG_DEBUG("Setting username: %s\n", config.username.c_str());
 			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
 			CheckError(status, "Failed to set username for OAuth", &error);
 		}
@@ -228,13 +232,11 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_jwt", &error);
 		CheckError(status, "Failed to set key-pair auth type", &error);
 		if (!config.private_key.empty()) {
-			// Check if this looks like a file path (contains / or ends with .p8)
-			bool is_file_path = config.private_key.find('/') != std::string::npos ||
-			                    config.private_key.find(".p8") != std::string::npos ||
-			                    config.private_key.find(".pem") != std::string::npos;
+			// Check if this is a file path by testing if the file exists
+			bool is_file_path = FileExists(config.private_key);
 
-			if (is_file_path && !config.private_key_passphrase.empty()) {
-				// For encrypted keys with passphrase, read file and use pkcs8_value
+			if (is_file_path) {
+				// Read the key file content
 				std::ifstream key_file(config.private_key);
 				if (!key_file.is_open()) {
 					throw IOException("Failed to open private key file: " + config.private_key);
@@ -242,27 +244,26 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 				std::string key_content((std::istreambuf_iterator<char>(key_file)), std::istreambuf_iterator<char>());
 				key_file.close();
 
+				// Use pkcs8_value for file content (supports both encrypted and unencrypted keys)
 				status =
 				    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_value",
 				                          key_content.c_str(), &error);
 				CheckError(status, "Failed to set private key content", &error);
-			} else if (is_file_path) {
-				// For unencrypted keys, use file path
-				status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key",
-				                               config.private_key.c_str(), &error);
-				CheckError(status, "Failed to set private key path", &error);
 			} else {
-				// Assume it's the key content directly
+				// Assume it's the key content directly (PEM format)
 				status =
 				    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_value",
 				                          config.private_key.c_str(), &error);
 				CheckError(status, "Failed to set private key content", &error);
 			}
-		}
-		if (!config.private_key_passphrase.empty()) {
-			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_password",
-			                               config.private_key_passphrase.c_str(), &error);
-			CheckError(status, "Failed to set private key passphrase", &error);
+
+			// Set passphrase if provided (for encrypted keys)
+			if (!config.private_key_passphrase.empty()) {
+				status =
+				    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_password",
+				                          config.private_key_passphrase.c_str(), &error);
+				CheckError(status, "Failed to set private key passphrase", &error);
+			}
 		}
 		break;
 	case SnowflakeAuthType::EXT_BROWSER:
@@ -430,9 +431,8 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
 
-	for (auto &schema : schemas) {
-		schema = StringUtil::Lower(schema);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	return schemas;
 }
@@ -447,9 +447,8 @@ vector<string> SnowflakeClient::ListTables(ClientContext &context, const string 
 	auto result = ExecuteAndGetStrings(context, table_name_query, {"table_name"});
 	auto table_names = result[0];
 
-	for (auto &table_name : table_names) {
-		table_name = StringUtil::Lower(table_name);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	DPRINT("ListTables returning %zu tables\n", table_names.size());
 	for (const auto &table_name : table_names) {
@@ -481,7 +480,9 @@ vector<SnowflakeColumn> SnowflakeClient::GetTableInfo(ClientContext &context, co
 	vector<SnowflakeColumn> col_data;
 
 	for (idx_t row_idx = 0; row_idx < result[0].size(); row_idx++) {
-		string column_name = StringUtil::Lower(result[0][row_idx]);
+		// Preserve original case from Snowflake (typically UPPERCASE)
+		// DuckDB handles case-insensitive column lookup internally
+		string column_name = result[0][row_idx];
 		string data_type = result[1][row_idx];
 		string nullable = result[2][row_idx];
 
