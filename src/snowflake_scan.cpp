@@ -109,8 +109,9 @@ TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {
 	                         ArrowTableFunction::ArrowScanInitGlobal, // Use DuckDB's init
 	                         ArrowTableFunction::ArrowScanInitLocal); // Use DuckDB's init
 
-	// Set pushdown flags based on the enable_pushdown parameter
-	table_scan.projection_pushdown = enable_pushdown;
+	// Projection pushdown must always be enabled to support COUNT(*) and other
+	// virtual column operations. Filter pushdown is controlled by user option.
+	table_scan.projection_pushdown = true;
 	table_scan.filter_pushdown = enable_pushdown;
 
 	return table_scan;

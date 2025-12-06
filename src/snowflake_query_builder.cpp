@@ -10,6 +10,8 @@
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/parser/expression/conjunction_expression.hpp"
 #include "duckdb/parser/expression/operator_expression.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
+#include "duckdb/parser/result_modifier.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/planner/filter/in_filter.hpp"
@@ -19,7 +21,8 @@ namespace duckdb {
 namespace snowflake {
 
 string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<string> &projection_columns,
-                                         TableFilterSet *filter_set, const vector<string> &column_names) {
+                                         TableFilterSet *filter_set, const vector<string> &column_names,
+                                         idx_t limit_value, idx_t offset_value) {
 	// Create a SelectStatement AST
 	auto select_stmt = make_uniq<SelectStatement>();
 	auto select_node = make_uniq<SelectNode>();
@@ -48,8 +51,10 @@ string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<
 	auto projection_list = BuildProjectionList(projection_columns);
 	if (!projection_list.empty()) {
 		select_node->select_list = std::move(projection_list);
+	} else {
+		// Empty projection list - use SELECT * to avoid invalid SQL like "SELECT FROM table"
+		select_node->select_list.push_back(make_uniq<StarExpression>());
 	}
-	// If empty, SelectNode defaults to SELECT *
 
 	// 3. Build the WHERE clause (filters)
 	auto where_expr = BuildWhereExpression(filter_set, column_names);
@@ -57,10 +62,22 @@ string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<
 		select_node->where_clause = std::move(where_expr);
 	}
 
-	// 4. Attach the select node to the statement
+	// 4. Build LIMIT/OFFSET modifier if specified
+	if (limit_value != NO_LIMIT || offset_value > 0) {
+		auto limit_modifier = make_uniq<LimitModifier>();
+		if (limit_value != NO_LIMIT) {
+			limit_modifier->limit = make_uniq<ConstantExpression>(Value::BIGINT(limit_value));
+		}
+		if (offset_value > 0) {
+			limit_modifier->offset = make_uniq<ConstantExpression>(Value::BIGINT(offset_value));
+		}
+		select_node->modifiers.push_back(std::move(limit_modifier));
+	}
+
+	// 5. Attach the select node to the statement
 	select_stmt->node = std::move(select_node);
 
-	// 5. Serialize AST to SQL string
+	// 6. Serialize AST to SQL string
 	return select_stmt->ToString();
 }
 

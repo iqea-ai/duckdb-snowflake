@@ -15,6 +15,7 @@
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_transaction.hpp"
 #include "snowflake_secret_provider.hpp"
+#include "snowflake_optimizer_extension.hpp"
 
 namespace duckdb {
 
@@ -47,6 +48,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Register storage extension (only available when ADBC is available)
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.storage_extensions["snowflake"] = make_uniq<snowflake::SnowflakeStorageExtension>();
+
+	// Register optimizer extension for LIMIT pushdown
+	config.optimizer_extensions.push_back(snowflake::SnowflakeOptimizerExtension::GetOptimizerExtension());
 #else
 	// ADBC not available - register a placeholder function that throws an error
 	auto snowflake_scan_function =

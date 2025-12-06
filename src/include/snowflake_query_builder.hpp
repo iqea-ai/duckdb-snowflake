@@ -5,6 +5,7 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
+#include "duckdb/common/limits.hpp"
 
 namespace duckdb {
 namespace snowflake {
@@ -32,15 +33,21 @@ namespace snowflake {
 //!   3. Leverages DuckDB's SQL serialization logic
 class SnowflakeQueryBuilder {
 public:
+	//! Special value indicating no limit
+	static constexpr idx_t NO_LIMIT = NumericLimits<idx_t>::Maximum();
+
 	//! Build a complete SELECT query using AST construction
 	//! Input:
 	//!   - table_name: Qualified table name (e.g., "database.schema.table")
 	//!   - projection_columns: Columns to select (empty = SELECT *)
 	//!   - filter_set: DuckDB's pre-parsed filters
 	//!   - column_names: Maps column indices to names
+	//!   - limit_value: LIMIT clause value (NO_LIMIT = no limit)
+	//!   - offset_value: OFFSET clause value (0 = no offset)
 	//! Output: SQL string serialized from AST
 	static string BuildQuery(const string &table_name, const vector<string> &projection_columns,
-	                         TableFilterSet *filter_set, const vector<string> &column_names);
+	                         TableFilterSet *filter_set, const vector<string> &column_names,
+	                         idx_t limit_value = NO_LIMIT, idx_t offset_value = 0);
 
 private:
 	//! Build WHERE clause expression from DuckDB filters

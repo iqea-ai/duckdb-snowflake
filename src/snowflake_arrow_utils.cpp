@@ -43,6 +43,8 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	}
 
 	// Apply pushdown if enabled (this modifies the query before execution)
+	// Note: LIMIT/OFFSET values are set by the optimizer extension on the factory
+	// before this function is called, so we pass them through here
 	if (factory->filter_pushdown_enabled || factory->projection_pushdown_enabled) {
 		// Extract projection columns from parameters
 		vector<string> projection_cols;
@@ -51,7 +53,9 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 		}
 
 		// Call UpdatePushdownParameters to build modified query
-		factory->UpdatePushdownParameters(projection_cols, parameters.filters);
+		// Pass limit/offset values that were set by the optimizer extension
+		factory->UpdatePushdownParameters(projection_cols, parameters.filters, factory->limit_value,
+		                                  factory->offset_value);
 	} else {
 		// No pushdown - use original query as-is (like main branch behavior)
 		DPRINT("Pushdown disabled, using original query: %s\n", factory->query.c_str());
@@ -187,14 +191,18 @@ void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema)
 }
 
 void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> &projection,
-                                                           TableFilterSet *filter_set) {
+                                                           TableFilterSet *filter_set,
+                                                           idx_t limit, idx_t offset) {
 	DPRINT("UpdatePushdownParameters called: projection_size=%lu, "
-	       "filter_count=%lu\n",
-	       projection.size(), filter_set ? filter_set->filters.size() : 0);
+	       "filter_count=%lu, limit=%lu, offset=%lu\n",
+	       projection.size(), filter_set ? filter_set->filters.size() : 0,
+	       limit == NO_LIMIT ? 0 : limit, offset);
 
 	// Store the parameters
 	projection_columns = projection;
 	current_filters = filter_set;
+	limit_value = limit;
+	offset_value = offset;
 
 	try {
 		// Extract table name from base query (e.g., "SELECT * FROM
@@ -234,7 +242,7 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> 
 		// for filters.
 		vector<string> filter_column_names = cols_to_project.empty() ? column_names : cols_to_project;
 		modified_query = snowflake::SnowflakeQueryBuilder::BuildQuery(table_name, cols_to_project, filters_to_push,
-		                                                              filter_column_names);
+		                                                              filter_column_names, limit_value, offset_value);
 
 		DPRINT("Pushdown applied:\n  Original: %s\n  Modified: %s\n", query.c_str(), modified_query.c_str());
 

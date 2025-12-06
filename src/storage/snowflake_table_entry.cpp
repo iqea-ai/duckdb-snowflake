@@ -29,18 +29,19 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
 
 	// Apply pushdown settings from catalog options
+	// Projection pushdown must always be enabled to support COUNT(*) and other
+	// virtual column operations. Filter pushdown is controlled by user option.
 	auto &snowflake_catalog = catalog.Cast<SnowflakeCatalog>();
 	const auto &catalog_options = snowflake_catalog.GetOptions();
 	factory->filter_pushdown_enabled = catalog_options.enable_pushdown;
-	factory->projection_pushdown_enabled = catalog_options.enable_pushdown;
-	DPRINT("SnowflakeTableEntry: Pushdown %s (enable_pushdown=%s)\n",
-	       catalog_options.enable_pushdown ? "ENABLED" : "DISABLED",
-	       catalog_options.enable_pushdown ? "true" : "false");
+	factory->projection_pushdown_enabled = true;
+	DPRINT("SnowflakeTableEntry: Filter pushdown %s, projection pushdown always enabled\n",
+	       catalog_options.enable_pushdown ? "ENABLED" : "DISABLED");
 
 	auto snowflake_bind_data = make_uniq<SnowflakeScanBindData>(std::move(factory));
 
-	// Set pushdown settings on bind_data (critical for avoiding crashes!)
-	snowflake_bind_data->projection_pushdown_enabled = catalog_options.enable_pushdown;
+	// Set pushdown settings on bind_data (projection always enabled for COUNT(*) support)
+	snowflake_bind_data->projection_pushdown_enabled = true;
 
 	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
 	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),

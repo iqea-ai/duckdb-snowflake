@@ -199,17 +199,17 @@ SELECT c_acctbal / 0 FROM sf_db.tpch_sf1.customer LIMIT 1;
 ----
 inf
 
-# Test 21: Test invalid type casting (should fail)
+# Test 21: Test invalid type casting (should fail with conversion error)
 statement error
 SELECT CAST('invalid_number' AS INTEGER) FROM sf_db.tpch_sf1.customer LIMIT 1;
 ----
-Not implemented Error: Virtual columns require projection pushdown
+Conversion Error
 
-# Test 22: Test invalid date casting (should fail)
+# Test 22: Test invalid date casting (should fail with conversion error)
 statement error
 SELECT CAST('invalid_date' AS DATE) FROM sf_db.tpch_sf1.customer LIMIT 1;
 ----
-Not implemented Error: Virtual columns require projection pushdown
+Conversion Error
 
 # Test 23: Test NULL operations (should work)
 query I
