@@ -194,9 +194,10 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> 
                                                            TableFilterSet *filter_set,
                                                            idx_t limit, idx_t offset) {
 	DPRINT("UpdatePushdownParameters called: projection_size=%lu, "
-	       "filter_count=%lu, limit=%lu, offset=%lu\n",
+	       "filter_count=%lu, limit=%lu, offset=%lu, aggregate=%s\n",
 	       projection.size(), filter_set ? filter_set->filters.size() : 0,
-	       limit == NO_LIMIT ? 0 : limit, offset);
+	       limit == NO_LIMIT ? 0 : limit, offset,
+	       aggregate_pushdown.empty() ? "(none)" : aggregate_pushdown.c_str());
 
 	// Store the parameters
 	projection_columns = projection;
@@ -219,6 +220,14 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> 
 			}
 		} else {
 			throw InvalidInputException("Invalid base query format: missing FROM clause");
+		}
+
+		// If aggregate pushdown is set, use that instead of normal query building
+		if (!aggregate_pushdown.empty()) {
+			modified_query = "SELECT " + aggregate_pushdown + " FROM " + table_name;
+			DPRINT("Aggregate pushdown applied:\n  Original: %s\n  Modified: %s\n", query.c_str(),
+			       modified_query.c_str());
+			return;
 		}
 
 		// Determine what to push down based on enabled flags

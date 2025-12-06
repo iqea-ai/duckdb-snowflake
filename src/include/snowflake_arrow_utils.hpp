@@ -46,6 +46,9 @@ struct SnowflakeArrowStreamFactory {
 	idx_t limit_value = NO_LIMIT;
 	idx_t offset_value = 0;
 
+	// Aggregate pushdown (e.g., "COUNT(*)" or "COUNT(column_name)")
+	string aggregate_pushdown;
+
 	SnowflakeArrowStreamFactory(shared_ptr<snowflake::SnowflakeClient> conn, const std::string &query_str)
 	    : connection(std::move(conn)), query(query_str), modified_query(query_str) {
 		std::memset(&statement, 0, sizeof(statement));
