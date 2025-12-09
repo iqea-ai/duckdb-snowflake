@@ -80,22 +80,30 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 		auto auth_type_str = snowflake_secret->GetAuthType();
 		LOG_INFO("GetCredentials: auth_type_str = '%s'\n", auth_type_str.c_str());
 		if (!auth_type_str.empty()) {
-			// Parse auth_type string to enum
-			if (auth_type_str == "oauth") {
+			// Parse auth_type string to enum (case-insensitive)
+			if (StringUtil::CIEquals(auth_type_str, "oauth")) {
 				config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
 				config.oauth_token = snowflake_secret->GetToken();
 				LOG_INFO("Set auth_type to OAUTH, token length = %zu\n", config.oauth_token.length());
-			} else if (auth_type_str == "key_pair") {
+			} else if (StringUtil::CIEquals(auth_type_str, "key_pair")) {
 				config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
 				config.private_key = snowflake_secret->GetPrivateKey();
 				config.private_key_passphrase = snowflake_secret->GetPrivateKeyPassphrase();
-			} else if (auth_type_str == "ext_browser" || auth_type_str == "externalbrowser") {
+				LOG_INFO("Set auth_type to KEY_PAIR\n");
+			} else if (StringUtil::CIEquals(auth_type_str, "ext_browser") ||
+			           StringUtil::CIEquals(auth_type_str, "externalbrowser")) {
 				config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
-			} else if (auth_type_str == "okta") {
+				LOG_INFO("Set auth_type to EXT_BROWSER\n");
+			} else if (StringUtil::CIEquals(auth_type_str, "okta")) {
 				config.auth_type = snowflake::SnowflakeAuthType::OKTA;
 				config.okta_url = snowflake_secret->GetOktaUrl();
-			} else if (auth_type_str == "mfa") {
+				LOG_INFO("Set auth_type to OKTA\n");
+			} else if (StringUtil::CIEquals(auth_type_str, "mfa")) {
 				config.auth_type = snowflake::SnowflakeAuthType::MFA;
+				LOG_INFO("Set auth_type to MFA\n");
+			} else {
+				// Unknown auth_type - log warning but don't fail (for backward compatibility)
+				LOG_WARN("Unknown auth_type '%s', using default PASSWORD auth\n", auth_type_str.c_str());
 			}
 		} else {
 			LOG_INFO("auth_type_str is empty, using default PASSWORD auth\n");
