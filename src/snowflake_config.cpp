@@ -1,5 +1,6 @@
 #include "snowflake_config.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #include <sstream>
 #include <regex>
@@ -36,17 +37,17 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 		else if (key == "role") {
 			config.role = value;
 		} else if (key == "auth_type") {
-			if (value == "password") {
+			if (StringUtil::CIEquals(value, "password")) {
 				config.auth_type = SnowflakeAuthType::PASSWORD;
-			} else if (value == "oauth") {
+			} else if (StringUtil::CIEquals(value, "oauth")) {
 				config.auth_type = SnowflakeAuthType::OAUTH;
-			} else if (value == "key_pair") {
+			} else if (StringUtil::CIEquals(value, "key_pair")) {
 				config.auth_type = SnowflakeAuthType::KEY_PAIR;
-			} else if (value == "ext_browser" || value == "externalbrowser") {
+			} else if (StringUtil::CIEquals(value, "ext_browser") || StringUtil::CIEquals(value, "externalbrowser")) {
 				config.auth_type = SnowflakeAuthType::EXT_BROWSER;
-			} else if (value == "okta") {
+			} else if (StringUtil::CIEquals(value, "okta")) {
 				config.auth_type = SnowflakeAuthType::OKTA;
-			} else if (value == "mfa") {
+			} else if (StringUtil::CIEquals(value, "mfa")) {
 				config.auth_type = SnowflakeAuthType::MFA;
 			}
 		} else if (key == "token") {
@@ -60,9 +61,9 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 		} else if (key == "query_timeout") {
 			config.query_timeout = std::stoi(value);
 		} else if (key == "keep_alive") {
-			config.keep_alive = (value == "true" || value == "1");
+			config.keep_alive = (StringUtil::CIEquals(value, "true") || value == "1");
 		} else if (key == "use_high_precision") {
-			config.use_high_precision = (value == "true" || value == "1");
+			config.use_high_precision = (StringUtil::CIEquals(value, "true") || value == "1");
 		}
 	}
 
