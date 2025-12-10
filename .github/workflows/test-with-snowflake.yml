@@ -49,8 +49,9 @@ jobs:
             exit 0
           fi
           
-          echo "Running Snowflake tests with credentials..."
-          make test_release
+          echo "Running Snowflake extension tests..."
+          # Run only Snowflake extension tests, not all DuckDB tests
+          ./build/release/test/unittest test/sql/snowflake_*.test test/sql/pushdown/*.test
       
       - name: Upload test results and profiling data
         if: always()
