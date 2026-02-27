@@ -51,8 +51,8 @@ jobs:
           
           echo "Running Snowflake extension tests..."
           # Run only Snowflake extension tests, not all DuckDB tests
-          # Quote patterns to prevent shell expansion concatenation
-          ./build/release/test/unittest "test/sql/snowflake_*.test" "test/sql/pushdown/*.test"
+          # Use Python wrapper script (like DuckDB workflows) to handle multiple patterns correctly
+          python3 duckdb/scripts/run_tests_one_by_one.py ./build/release/test/unittest "test/sql/snowflake_*.test" "test/sql/pushdown/*.test"
       
       - name: Upload test results and profiling data
         if: always()
