@@ -62,7 +62,7 @@ jobs:
       - name: Download extension artifact
         uses: actions/download-artifact@v4
         with:
-          name: snowflake-main-extension-${{ matrix.platform.name }}
+          name: snowflake-v1.5-variegata-extension-${{ matrix.platform.name }}
           path: ./extension-artifact
 
       - name: Download ADBC driver
@@ -100,19 +100,19 @@ jobs:
           
           # Create zip archive
           cd package
-          zip -r ../snowflake-extension-1.4-${{ matrix.platform.name }}.zip snowflake/
+          zip -r ../snowflake-extension-1.5-${{ matrix.platform.name }}.zip snowflake/
           cd ..
           
           # Display package info
           echo "Package contents:"
-          unzip -l snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          unzip -l snowflake-extension-1.5-${{ matrix.platform.name }}.zip
           echo ""
           echo "Package size:"
-          ls -lh snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          ls -lh snowflake-extension-1.5-${{ matrix.platform.name }}.zip
           
       - name: Validate package size
         run: |
-          PACKAGE_SIZE=$(stat -f%z snowflake-extension-1.4-${{ matrix.platform.name }}.zip 2>/dev/null || stat -c%s snowflake-extension-1.4-${{ matrix.platform.name }}.zip)
+          PACKAGE_SIZE=$(stat -f%z snowflake-extension-1.5-${{ matrix.platform.name }}.zip 2>/dev/null || stat -c%s snowflake-extension-1.5-${{ matrix.platform.name }}.zip)
           MIN_SIZE=$((10 * 1024 * 1024))  # 10MB minimum (ADBC driver is ~20MB)
           
           if [ $PACKAGE_SIZE -lt $MIN_SIZE ]; then
@@ -126,8 +126,8 @@ jobs:
       - name: Upload complete package
         uses: actions/upload-artifact@v4
         with:
-          name: snowflake-extension-1.4-${{ matrix.platform.name }}
-          path: snowflake-extension-1.4-${{ matrix.platform.name }}.zip
+          name: snowflake-extension-1.5-${{ matrix.platform.name }}
+          path: snowflake-extension-1.5-${{ matrix.platform.name }}.zip
           retention-days: 30
           if-no-files-found: error
 
