@@ -54,14 +54,74 @@ string SnowflakeSecret::GetSchema() const {
 	return "";
 }
 
+string SnowflakeSecret::GetAuthType() const {
+	Value value;
+	// Try both lowercase and uppercase variants
+	if (TryGetValue("auth_type", value) || TryGetValue("AUTH_TYPE", value)) {
+		return value.GetValue<string>();
+	}
+	return "password"; // default to password auth
+}
+
+string SnowflakeSecret::GetPrivateKey() const {
+	Value value;
+	// Try both lowercase and uppercase variants
+	if (TryGetValue("private_key", value) || TryGetValue("PRIVATE_KEY", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetPrivateKeyFile() const {
+	Value value;
+	// Try both lowercase and uppercase variants
+	if (TryGetValue("private_key_file", value) || TryGetValue("PRIVATE_KEY_FILE", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetPrivateKeyPassword() const {
+	Value value;
+	// Try both lowercase and uppercase variants
+	if (TryGetValue("private_key_password", value) || TryGetValue("PRIVATE_KEY_PASSWORD", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetToken() const {
+	Value value;
+	// Try both lowercase and uppercase variants
+	if (TryGetValue("token", value) || TryGetValue("TOKEN", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+//! Helper to try getting value with case-insensitive key lookup
+static bool TryGetValueCaseInsensitive(const SnowflakeSecret &secret, const string &key, Value &value) {
+	// Try lowercase
+	if (secret.TryGetValue(key, value)) {
+		return true;
+	}
+	// Try uppercase
+	string upper_key = StringUtil::Upper(key);
+	if (secret.TryGetValue(upper_key, value)) {
+		return true;
+	}
+	return false;
+}
+
 //! Validate that all required fields are present
 void SnowflakeSecret::Validate() const {
-	vector<string> required_fields = {"user", "password", "account", "database"};
+	// Always required fields
+	vector<string> always_required = {"user", "account", "database"};
 	vector<string> missing_fields;
 
-	for (const auto &field : required_fields) {
+	for (const auto &field : always_required) {
 		Value value;
-		if (!TryGetValue(field, value) || value.IsNull()) {
+		if (!TryGetValueCaseInsensitive(*this, field, value) || value.IsNull()) {
 			missing_fields.push_back(field);
 		}
 	}
@@ -69,6 +129,32 @@ void SnowflakeSecret::Validate() const {
 	if (!missing_fields.empty()) {
 		throw InvalidInputException("Snowflake secret is missing required fields: %s",
 		                            StringUtil::Join(missing_fields, ", "));
+	}
+
+	// Check auth_type and require appropriate credential
+	string auth_type = GetAuthType();
+	if (auth_type == "key_pair") {
+		string pk = GetPrivateKey();
+		string pk_file = GetPrivateKeyFile();
+		if (pk.empty() && pk_file.empty()) {
+			throw InvalidInputException(
+			    "Snowflake secret with auth_type 'key_pair' requires 'private_key' or 'private_key_file' field");
+		}
+	} else if (auth_type == "oauth") {
+		// OAuth requires a token
+		Value token_value;
+		if (!TryGetValueCaseInsensitive(*this, "token", token_value) || token_value.IsNull() ||
+		    token_value.GetValue<string>().empty()) {
+			throw InvalidInputException("Snowflake secret with auth_type 'oauth' requires 'token' field");
+		}
+	} else {
+		// password auth (default)
+		string pw = GetPassword();
+		if (pw.empty()) {
+			throw InvalidInputException(
+			    "Snowflake secret requires 'password' field (or use auth_type 'key_pair' with "
+			    "'private_key'/'private_key_file', or auth_type 'oauth' with 'token')");
+		}
 	}
 }
 
@@ -104,35 +190,66 @@ unique_ptr<BaseSecret> SnowflakeSecret::Deserialize(Deserializer &deserializer, 
 	return std::move(result);
 }
 
+//! Helper to find option with case-insensitive key lookup
+static case_insensitive_map_t<Value>::const_iterator FindOptionCaseInsensitive(
+    const case_insensitive_map_t<Value> &options, const string &key) {
+	// DuckDB's case_insensitive_map_t should handle this, but let's be explicit
+	auto it = options.find(key);
+	if (it != options.end()) {
+		return it;
+	}
+	// Try uppercase
+	it = options.find(StringUtil::Upper(key));
+	if (it != options.end()) {
+		return it;
+	}
+	// Try lowercase
+	it = options.find(StringUtil::Lower(key));
+	return it;
+}
+
 //! Create function for Snowflake secrets
 unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecretInput &input) {
 	// Create the secret with the provided scope and name
 	auto secret = make_uniq<SnowflakeSecret>(input.scope, input.provider, input.name);
 
 	// Extract Snowflake-specific parameters from the input options
-	vector<string> required_fields = {"user", "password", "account", "database"};
-	vector<string> optional_fields = {"warehouse", "schema"};
+	// Always required fields
+	vector<string> always_required = {"user", "account", "database"};
+	// Conditionally required (password OR private_key/private_key_file based on auth_type)
+	vector<string> auth_fields = {"password", "private_key", "private_key_file", "private_key_password", "auth_type", "token"};
+	// Optional fields
+	vector<string> optional_fields = {"warehouse", "schema", "role"};
 
-	// Process required fields
-	for (const auto &field : required_fields) {
-		auto it = input.options.find(field);
+	// Process always required fields
+	for (const auto &field : always_required) {
+		auto it = FindOptionCaseInsensitive(input.options, field);
 		if (it == input.options.end()) {
 			throw InvalidInputException("Snowflake secret requires field '%s'", field);
 		}
-
-		// Store the value in the secret map
+		// Store with lowercase key for consistent retrieval
 		secret->secret_map[field] = it->second;
 	}
 
-	// Process optional fields
-	for (const auto &field : optional_fields) {
-		auto it = input.options.find(field);
+	// Process auth-related fields (all optional at this stage, validated later)
+	for (const auto &field : auth_fields) {
+		auto it = FindOptionCaseInsensitive(input.options, field);
 		if (it != input.options.end()) {
+			// Store with lowercase key for consistent retrieval
 			secret->secret_map[field] = it->second;
 		}
 	}
 
-	// Validate the secret
+	// Process optional fields
+	for (const auto &field : optional_fields) {
+		auto it = FindOptionCaseInsensitive(input.options, field);
+		if (it != input.options.end()) {
+			// Store with lowercase key for consistent retrieval
+			secret->secret_map[field] = it->second;
+		}
+	}
+
+	// Validate the secret (checks auth_type and requires password OR private_key)
 	secret->Validate();
 
 	return std::move(secret);
@@ -165,6 +282,14 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["warehouse"] = LogicalType::VARCHAR;
 	create_function.named_parameters["database"] = LogicalType::VARCHAR;
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
+	create_function.named_parameters["role"] = LogicalType::VARCHAR;
+	// Keypair authentication support
+	create_function.named_parameters["auth_type"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key_file"] = LogicalType::VARCHAR;
+	create_function.named_parameters["private_key_password"] = LogicalType::VARCHAR;
+	// OAuth authentication support
+	create_function.named_parameters["token"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);

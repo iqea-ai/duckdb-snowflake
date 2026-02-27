@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10...3.29)
 
 # Set extension name here
 set(TARGET_NAME snowflake)
@@ -56,6 +56,8 @@ set(EXTENSION_SOURCES
     src/storage/snowflake_schema_set.cpp
     src/storage/snowflake_table_entry.cpp
     src/storage/snowflake_table_set.cpp
+    # ADBC driver manager (removed from DuckDB core in v1.5)
+    third_party/adbc/driver_manager.cpp
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

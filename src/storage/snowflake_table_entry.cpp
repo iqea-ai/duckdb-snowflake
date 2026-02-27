@@ -38,7 +38,7 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	// Use the new DuckDB API to populate the arrow table schema
 	vector<string> names;
 	vector<LogicalType> return_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), snowflake_bind_data->arrow_table,
+	ArrowTableFunction::PopulateArrowTableSchema(context, snowflake_bind_data->arrow_table,
 	                                             snowflake_bind_data->schema_root.arrow_schema);
 	names = snowflake_bind_data->arrow_table.GetNames();
 	return_types = snowflake_bind_data->arrow_table.GetTypes();

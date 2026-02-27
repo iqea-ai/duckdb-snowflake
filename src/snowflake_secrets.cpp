@@ -67,11 +67,29 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 
 		// Extract all the credential values and build config
 		config.username = snowflake_secret->GetUser();
-		config.password = snowflake_secret->GetPassword();
 		config.account = snowflake_secret->GetAccount();
 		config.warehouse = snowflake_secret->GetWarehouse();
 		config.database = snowflake_secret->GetDatabase();
 		// Note: schema is not stored in SnowflakeConfig as per the struct definition
+
+		// Handle auth type
+		std::string auth_type = snowflake_secret->GetAuthType();
+		std::string private_key = snowflake_secret->GetPrivateKey();
+		std::string private_key_file = snowflake_secret->GetPrivateKeyFile();
+		std::string private_key_password = snowflake_secret->GetPrivateKeyPassword();
+		if (auth_type == "key_pair") {
+			config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
+			config.private_key = private_key;
+			config.private_key_file = private_key_file;
+			config.private_key_password = private_key_password;
+		} else if (auth_type == "oauth") {
+			config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
+			config.oauth_token = snowflake_secret->GetToken();
+		} else {
+			// Default to password auth
+			config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;
+			config.password = snowflake_secret->GetPassword();
+		}
 
 	} catch (const std::exception &e) {
 		throw InvalidInputException("Failed to retrieve credentials for profile '" + profile_name + "': " + e.what());

@@ -9,13 +9,27 @@ require-env SNOWFLAKE_ACCOUNT
 
 require-env SNOWFLAKE_USERNAME
 
-require-env SNOWFLAKE_PASSWORD
+require-env SNOWFLAKE_PRIVATE_KEY_FILE
+
+require-env SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE
 
 require-env SNOWFLAKE_DATABASE
 
-# Test 1: ATTACH with READ_ONLY flag
+# Test 1: ATTACH with READ_ONLY flag using keypair auth via SECRET
 statement ok
-ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
+CREATE SECRET sf_attach_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+statement ok
+ATTACH '' AS sf_db (TYPE SNOWFLAKE, SECRET sf_attach_secret, READ_ONLY);
 
 # Test 2: Large result set handling
 query I
@@ -345,3 +359,6 @@ SELECT COUNT(c_custkey) as final_verification FROM sf_db.tpch_sf1.customer;
 # Test 25: Cleanup
 statement ok
 DETACH sf_db;
+
+statement ok
+DROP SECRET IF EXISTS sf_attach_secret;

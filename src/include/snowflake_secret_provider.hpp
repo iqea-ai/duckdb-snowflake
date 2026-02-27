@@ -13,6 +13,9 @@ public:
 	    : KeyValueSecret(prefix_paths, "snowflake", provider, name) {
 		// Mark sensitive fields for redaction
 		redact_keys.insert("password");
+		redact_keys.insert("private_key");
+		redact_keys.insert("private_key_password");
+		redact_keys.insert("token");
 		redact_keys.insert("secret");
 	}
 
@@ -23,6 +26,11 @@ public:
 	string GetWarehouse() const;
 	string GetDatabase() const;
 	string GetSchema() const;
+	string GetAuthType() const;
+	string GetPrivateKey() const;
+	string GetPrivateKeyFile() const;
+	string GetPrivateKeyPassword() const;
+	string GetToken() const;
 
 	//! Validate that all required fields are present
 	void Validate() const;

@@ -47,6 +47,10 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 			config.oauth_token = value;
 		} else if (key == "private_key") {
 			config.private_key = value;
+		} else if (key == "private_key_file") {
+			config.private_key_file = value;
+		} else if (key == "private_key_password") {
+			config.private_key_password = value;
 		} else if (key == "query_timeout") {
 			config.query_timeout = std::stoi(value);
 		} else if (key == "keep_alive") {

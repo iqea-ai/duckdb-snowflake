@@ -8,6 +8,8 @@
 #include "duckdb/common/string_util.hpp"
 
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -186,27 +188,72 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	}
 
 	// Set authentication based on type
+	// Reference: https://arrow.apache.org/adbc/current/driver/snowflake.html
 	switch (config.auth_type) {
 	case SnowflakeAuthType::PASSWORD:
+		// Default auth type is auth_snowflake (password-based)
 		if (!config.password.empty()) {
 			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
 			CheckError(status, "Failed to set password", &error);
 		}
 		break;
 	case SnowflakeAuthType::OAUTH:
+		// Set auth type to auth_oauth
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
+		CheckError(status, "Failed to set auth type to oauth", &error);
 		if (!config.oauth_token.empty()) {
-			status =
-			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
+			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.auth_token",
+			                               config.oauth_token.c_str(), &error);
 			CheckError(status, "Failed to set OAuth token", &error);
 		}
 		break;
-	case SnowflakeAuthType::KEY_PAIR:
-		if (!config.private_key.empty()) {
-			status =
-			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.private_key", config.private_key.c_str(), &error);
+	case SnowflakeAuthType::KEY_PAIR: {
+		// Set auth type to auth_jwt for keypair authentication
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_jwt", &error);
+		CheckError(status, "Failed to set auth type to jwt", &error);
+
+		std::string private_key_content;
+		if (!config.private_key_file.empty()) {
+			// Read private key from file
+			std::ifstream key_file(config.private_key_file);
+			if (!key_file.is_open()) {
+				throw IOException("Failed to open private key file: " + config.private_key_file);
+			}
+			std::stringstream buffer;
+			buffer << key_file.rdbuf();
+			private_key_content = buffer.str();
+		} else if (!config.private_key.empty()) {
+			private_key_content = config.private_key;
+		}
+
+		if (!private_key_content.empty()) {
+			// Use jwt_private_key_pkcs8_value for PKCS8 keys (supports both encrypted and unencrypted)
+			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_value",
+			                               private_key_content.c_str(), &error);
 			CheckError(status, "Failed to set private key", &error);
 		}
+
+		// Set password for encrypted private keys
+		std::string password_content;
+		if (!config.private_key_password.empty()) {
+			// Check if it's a file path or direct password
+			std::ifstream pass_file(config.private_key_password);
+			if (pass_file.is_open()) {
+				// It's a file, read the content
+				std::getline(pass_file, password_content);
+			} else {
+				// It's a direct password
+				password_content = config.private_key_password;
+			}
+			if (!password_content.empty()) {
+				status =
+				    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.jwt_private_key_pkcs8_password",
+				                          password_content.c_str(), &error);
+				CheckError(status, "Failed to set private key password", &error);
+			}
+		}
 		break;
+	}
 	}
 
 	// Set optional parameters
@@ -569,7 +616,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	ArrowTableSchema arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableSchema(DBConfig::GetConfig(context), arrow_table,
+	ArrowTableFunction::PopulateArrowTableSchema(context, arrow_table,
 	                                             schema_wrapper.arrow_schema);
 	actual_names = arrow_table.GetNames();
 	actual_types = arrow_table.GetTypes();

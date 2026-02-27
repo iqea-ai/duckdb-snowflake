@@ -9,7 +9,9 @@ require-env SNOWFLAKE_ACCOUNT
 
 require-env SNOWFLAKE_USERNAME
 
-require-env SNOWFLAKE_PASSWORD
+require-env SNOWFLAKE_PRIVATE_KEY_FILE
+
+require-env SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE
 
 require-env SNOWFLAKE_DATABASE
 
@@ -23,13 +25,15 @@ SELECT loaded, installed FROM duckdb_extensions() WHERE extension_name = 'snowfl
 ----
 true	true
 
-# Test 3: Create Basic Snowflake Secret
+# Test 3: Create Basic Snowflake Secret with Keypair Auth
 statement ok
 CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_test (
     TYPE snowflake,
     ACCOUNT '${SNOWFLAKE_ACCOUNT}',
     USER '${SNOWFLAKE_USERNAME}',
-    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
     DATABASE '${SNOWFLAKE_DATABASE}',
     WAREHOUSE 'COMPUTE_WH'
 )
@@ -40,9 +44,21 @@ SELECT type, name FROM duckdb_secrets() WHERE type = 'snowflake' ORDER BY name
 ----
 snowflake	snowflake_test
 
-# Test 5: ATTACH with READ_ONLY flag
+# Test 5: ATTACH with READ_ONLY flag using keypair auth via SECRET
 statement ok
-ATTACH 'account=${SNOWFLAKE_ACCOUNT};user=${SNOWFLAKE_USERNAME};password=${SNOWFLAKE_PASSWORD};warehouse=COMPUTE_WH;database=${SNOWFLAKE_DATABASE}' AS sf_db (TYPE SNOWFLAKE, READ_ONLY);
+CREATE SECRET sf_attach_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+statement ok
+ATTACH '' AS sf_db (TYPE SNOWFLAKE, SECRET sf_attach_secret, READ_ONLY);
 
 # Test 6: Basic database verification
 query I
@@ -91,33 +107,38 @@ SELECT COUNT(c_custkey) as total_customers FROM sf_db.tpch_sf1.customer;
 ----
 150000
 
-# Test 11: Create Secret with Minimal Parameters
+# Test 11: Create Secret with Minimal Keypair Parameters
 statement ok
 CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_minimal (
     TYPE snowflake,
     ACCOUNT '${SNOWFLAKE_ACCOUNT}',
     USER '${SNOWFLAKE_USERNAME}',
-    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
     DATABASE '${SNOWFLAKE_DATABASE}'
 )
 
-# Test 12: Create Secret with All Supported Parameters
+# Test 12: Create Secret with All Supported Parameters (keypair)
 statement ok
 CREATE PERSISTENT SECRET IF NOT EXISTS snowflake_full (
     TYPE snowflake,
     ACCOUNT '${SNOWFLAKE_ACCOUNT}',
     USER '${SNOWFLAKE_USERNAME}',
-    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
     DATABASE '${SNOWFLAKE_DATABASE}',
     WAREHOUSE 'COMPUTE_WH',
-    SCHEMA 'PUBLIC'
+    SCHEMA 'PUBLIC',
+    ROLE 'PUBLIC'
 )
 
 # Test 13: Verify Secret Parameters
 query I
 SELECT COUNT(*) as secret_count FROM duckdb_secrets() WHERE type = 'snowflake'
 ----
-3
+4
 
 # Test 14: Create Secret with Missing Required Fields (should fail)
 statement error
@@ -141,16 +162,16 @@ CREATE PERSISTENT SECRET missing_user (
 ----
 Snowflake secret requires field 'user'
 
-# Test 16: Create Secret with Missing Password (should fail)
+# Test 16: Create Secret with Missing Auth Credential (should fail - no password or private_key)
 statement error
-CREATE PERSISTENT SECRET missing_password (
+CREATE PERSISTENT SECRET missing_auth (
     TYPE snowflake,
     ACCOUNT 'test_account',
     USER 'test_user',
     DATABASE 'test_db'
 )
 ----
-Snowflake secret requires field 'password'
+Snowflake secret requires 'password' field
 
 # Test 17: Create Secret with Missing Database (should fail)
 statement error
@@ -197,6 +218,9 @@ CREATE PERSISTENT SECRET duplicate_test (
 Persistent secret with name 'duplicate_test' already exists in secret storage 'local_file'!
 
 # Test 20: Clean up all secrets
+statement ok
+DROP SECRET IF EXISTS sf_attach_secret
+
 statement ok
 DROP SECRET IF EXISTS snowflake_test
 
