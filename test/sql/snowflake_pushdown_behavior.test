@@ -357,7 +357,7 @@ WHERE L_ORDERKEY BETWEEN 1 AND 50 AND L_LINENUMBER BETWEEN 1 AND 3;
 
 # Test 17: Profiling - Enable profiling to see query metrics
 statement ok
-PRAGMA enable_profiling;
+PRAGMA enable_profiling='json';
 
 statement ok
 PRAGMA profiling_output='profile_output.json';
