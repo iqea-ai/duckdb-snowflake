@@ -1,0 +1,485 @@
+# name: test/sql/snowflake_all_auth_methods.test
+# description: Comprehensive test of all Snowflake authentication methods
+# group: [sql]
+
+require snowflake
+
+# Common environment variables
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_DATABASE
+
+# Test 1: Extension Loading
+statement ok
+SELECT snowflake_version()
+
+# Test 2: Check Extension Version
+query TT
+SELECT loaded, installed FROM duckdb_extensions() WHERE extension_name = 'snowflake'
+----
+true	true
+
+#############################################
+# PASSWORD AUTHENTICATION (Tested)
+#############################################
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+# Test 3: Create Password Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS sf_password_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+)
+
+# Test 4: Verify Password Secret Creation
+query T
+SELECT name FROM duckdb_secrets() WHERE name = 'sf_password_secret'
+----
+sf_password_secret
+
+# Test 5: Attach with Password Authentication
+statement ok
+ATTACH '' AS sf_password (TYPE snowflake, SECRET sf_password_secret, READ_ONLY);
+
+# Test 6: Verify Password Connection - Database List
+query I
+SELECT COUNT(*) >= 1 FROM (SELECT database_name FROM duckdb_databases() WHERE database_name = 'sf_password')
+----
+true
+
+# Test 7: Verify Password Connection - Schema Discovery
+query I
+SELECT COUNT(*) >= 1 FROM sf_password.information_schema.schemata WHERE schema_name = 'TPCH_SF1'
+----
+true
+
+# Test 8: Verify Password Connection - Table Discovery
+query I
+SELECT COUNT(*) >= 3 FROM sf_password.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM')
+----
+true
+
+# Test 9: Verify Password Connection - Data Access
+query I
+SELECT COUNT(c_custkey) FROM sf_password.tpch_sf1.customer
+----
+150000
+
+# Test 10: Verify Password Connection - Join Query
+# Verify join works and returns data (not checking exact count)
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT c.c_custkey 
+    FROM sf_password.tpch_sf1.customer c
+    JOIN sf_password.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+    LIMIT 1000
+)
+----
+true
+
+#############################################
+# OAUTH 2.0 AUTHENTICATION (Known Issues - ADBC driver token validation fails)
+#############################################
+
+require-env SNOWFLAKE_OAUTH_USER
+
+require-env SNOWFLAKE_OAUTH_TOKEN
+
+# Test 11: Create OAuth Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS sf_oauth_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_OAUTH_USER}',
+    AUTH_TYPE 'oauth',
+    TOKEN '${SNOWFLAKE_OAUTH_TOKEN}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+)
+
+# Test 12: Verify OAuth Secret Creation
+query T
+SELECT name FROM duckdb_secrets() WHERE name = 'sf_oauth_secret'
+----
+sf_oauth_secret
+
+# Test 13: Attach with OAuth Authentication
+statement ok
+ATTACH '' AS sf_oauth (TYPE snowflake, SECRET sf_oauth_secret, READ_ONLY);
+
+# Allow time for OAuth protocol to complete
+statement ok
+SELECT pg_sleep(2);
+
+# Test 14: Verify OAuth Connection - Database List
+query I
+SELECT COUNT(*) >= 1 FROM (SELECT database_name FROM duckdb_databases() WHERE database_name = 'sf_oauth')
+----
+true
+
+# Test 15: Verify OAuth Connection - Schema Discovery
+query I
+SELECT COUNT(*) >= 1 FROM sf_oauth.information_schema.schemata WHERE schema_name = 'TPCH_SF1'
+----
+true
+
+# Test 16: Verify OAuth Connection - Table Discovery
+query I
+SELECT COUNT(*) >= 3 FROM sf_oauth.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM')
+----
+true
+
+# Test 17: Verify OAuth Connection - Data Access
+query I
+SELECT COUNT(c_custkey) FROM sf_oauth.tpch_sf1.customer
+----
+150000
+
+# Test 18: Verify OAuth Connection - Join Query
+query I
+SELECT COUNT(*) FROM sf_oauth.tpch_sf1.customer c
+JOIN sf_oauth.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+LIMIT 1000
+----
+1000
+
+#############################################
+# KEY PAIR AUTHENTICATION (Tested)
+#############################################
+
+require-env SNOWFLAKE_KEYPAIR_USER
+
+require-env SNOWFLAKE_PRIVATE_KEY_PATH
+
+require-env SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+
+# Test 19: Create Key Pair Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS sf_keypair_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_KEYPAIR_USER}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY '${SNOWFLAKE_PRIVATE_KEY_PATH}',
+    PRIVATE_KEY_PASSPHRASE '${SNOWFLAKE_PRIVATE_KEY_PASSPHRASE}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+)
+
+# Test 20: Verify Key Pair Secret Creation
+query T
+SELECT name FROM duckdb_secrets() WHERE name = 'sf_keypair_secret'
+----
+sf_keypair_secret
+
+# Test 21: Attach with Key Pair Authentication
+statement ok
+ATTACH '' AS sf_keypair (TYPE snowflake, SECRET sf_keypair_secret, READ_ONLY);
+
+# Allow time for key pair authentication to complete
+statement ok
+SELECT pg_sleep(2);
+
+# Test 22: Verify Key Pair Connection - Database List
+query I
+SELECT COUNT(*) >= 1 FROM (SELECT database_name FROM duckdb_databases() WHERE database_name = 'sf_keypair')
+----
+true
+
+# Test 23: Verify Key Pair Connection - Schema Discovery
+query I
+SELECT COUNT(*) >= 1 FROM sf_keypair.information_schema.schemata WHERE schema_name = 'TPCH_SF1'
+----
+true
+
+# Test 24: Verify Key Pair Connection - Table Discovery
+query I
+SELECT COUNT(*) >= 3 FROM sf_keypair.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM')
+----
+true
+
+# Test 25: Verify Key Pair Connection - Data Access
+query I
+SELECT COUNT(c_custkey) FROM sf_keypair.tpch_sf1.customer
+----
+150000
+
+# Test 26: Verify Key Pair Connection - Join Query
+query I
+SELECT COUNT(*) FROM sf_keypair.tpch_sf1.customer c
+JOIN sf_keypair.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+LIMIT 1000
+----
+1000
+
+#############################################
+# NATIVE OKTA AUTHENTICATION (Requires Okta IdP - not compatible with Auth0)
+# Note: This requires browser interaction and Okta as identity provider
+#############################################
+
+require-env SNOWFLAKE_OKTA_USER
+
+require-env SNOWFLAKE_OKTA_URL
+
+# Test 27: Create Okta Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS sf_okta_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_OKTA_USER}',
+    AUTH_TYPE 'okta',
+    OKTA_URL '${SNOWFLAKE_OKTA_URL}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+)
+
+# Test 28: Verify Okta Secret Creation
+query T
+SELECT name FROM duckdb_secrets() WHERE name = 'sf_okta_secret'
+----
+sf_okta_secret
+
+# Test 29: Attach with Okta Authentication
+# Note: This will open a browser window for SSO authentication
+statement ok
+ATTACH '' AS sf_okta (TYPE snowflake, SECRET sf_okta_secret, READ_ONLY);
+
+# Allow time for Okta browser authentication to complete
+statement ok
+SELECT pg_sleep(5);
+
+# Test 30: Verify Okta Connection - Database List
+query I
+SELECT COUNT(*) >= 1 FROM (SELECT database_name FROM duckdb_databases() WHERE database_name = 'sf_okta')
+----
+true
+
+# Test 31: Verify Okta Connection - Schema Discovery
+query I
+SELECT COUNT(*) >= 1 FROM sf_okta.information_schema.schemata WHERE schema_name = 'TPCH_SF1'
+----
+true
+
+# Test 32: Verify Okta Connection - Table Discovery
+query I
+SELECT COUNT(*) >= 3 FROM sf_okta.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM')
+----
+true
+
+# Test 33: Verify Okta Connection - Data Access
+query I
+SELECT COUNT(c_custkey) FROM sf_okta.tpch_sf1.customer
+----
+150000
+
+# Test 34: Verify Okta Connection - Join Query
+query I
+SELECT COUNT(*) FROM sf_okta.tpch_sf1.customer c
+JOIN sf_okta.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+LIMIT 1000
+----
+1000
+
+#############################################
+# MFA AUTHENTICATION (Not Suitable for Programmatic Use)
+# Note: MFA with TOTP is only for interactive browser sessions
+# Error: "MFA methods are not supported for programmatic authentication"
+# Use Key Pair authentication for secure programmatic access instead
+#############################################
+
+require-env SNOWFLAKE_MFA_USER
+
+require-env SNOWFLAKE_MFA_PASSWORD
+
+# Test 35: Create MFA Secret
+statement ok
+CREATE PERSISTENT SECRET IF NOT EXISTS sf_mfa_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_MFA_USER}',
+    PASSWORD '${SNOWFLAKE_MFA_PASSWORD}',
+    AUTH_TYPE 'mfa',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+)
+
+# Test 36: Verify MFA Secret Creation
+query T
+SELECT name FROM duckdb_secrets() WHERE name = 'sf_mfa_secret'
+----
+sf_mfa_secret
+
+# Test 37: Attach with MFA Authentication
+# Note: This will prompt for MFA token
+statement ok
+ATTACH '' AS sf_mfa (TYPE snowflake, SECRET sf_mfa_secret, READ_ONLY);
+
+# Allow time for MFA authentication to complete
+statement ok
+SELECT pg_sleep(3);
+
+# Test 38: Verify MFA Connection - Database List
+query I
+SELECT COUNT(*) >= 1 FROM (SELECT database_name FROM duckdb_databases() WHERE database_name = 'sf_mfa')
+----
+true
+
+# Test 39: Verify MFA Connection - Schema Discovery
+query I
+SELECT COUNT(*) >= 1 FROM sf_mfa.information_schema.schemata WHERE schema_name = 'TPCH_SF1'
+----
+true
+
+# Test 40: Verify MFA Connection - Table Discovery
+query I
+SELECT COUNT(*) >= 3 FROM sf_mfa.information_schema.tables 
+WHERE table_schema = 'TPCH_SF1' AND table_name IN ('CUSTOMER', 'ORDERS', 'LINEITEM')
+----
+true
+
+# Test 41: Verify MFA Connection - Data Access
+query I
+SELECT COUNT(c_custkey) FROM sf_mfa.tpch_sf1.customer
+----
+150000
+
+# Test 42: Verify MFA Connection - Join Query
+query I
+SELECT COUNT(*) FROM sf_mfa.tpch_sf1.customer c
+JOIN sf_mfa.tpch_sf1.orders o ON c.c_custkey = o.o_custkey
+LIMIT 1000
+----
+1000
+
+#############################################
+# CROSS-AUTHENTICATION COMPARISON QUERIES
+# Run same queries across all auth methods
+#############################################
+
+# Test 43: Compare Customer Counts Across All Auth Methods
+query IIIII
+SELECT 
+    (SELECT COUNT(*) FROM sf_password.tpch_sf1.customer) as password_count,
+    (SELECT COUNT(*) FROM sf_oauth.tpch_sf1.customer) as oauth_count,
+    (SELECT COUNT(*) FROM sf_keypair.tpch_sf1.customer) as keypair_count,
+    (SELECT COUNT(*) FROM sf_okta.tpch_sf1.customer) as okta_count,
+    (SELECT COUNT(*) FROM sf_mfa.tpch_sf1.customer) as mfa_count
+----
+150000	150000	150000	150000	150000
+
+# Test 44: Compare Order Counts Across All Auth Methods
+query IIIII
+SELECT 
+    (SELECT COUNT(*) FROM sf_password.tpch_sf1.orders) as password_orders,
+    (SELECT COUNT(*) FROM sf_oauth.tpch_sf1.orders) as oauth_orders,
+    (SELECT COUNT(*) FROM sf_keypair.tpch_sf1.orders) as keypair_orders,
+    (SELECT COUNT(*) FROM sf_okta.tpch_sf1.orders) as okta_orders,
+    (SELECT COUNT(*) FROM sf_mfa.tpch_sf1.orders) as mfa_orders
+----
+1500000	1500000	1500000	1500000	1500000
+
+# Test 45: Compare Aggregation Results Across All Auth Methods
+query IIIII
+SELECT 
+    (SELECT COUNT(DISTINCT c_nationkey) FROM sf_password.tpch_sf1.customer) as password_nations,
+    (SELECT COUNT(DISTINCT c_nationkey) FROM sf_oauth.tpch_sf1.customer) as oauth_nations,
+    (SELECT COUNT(DISTINCT c_nationkey) FROM sf_keypair.tpch_sf1.customer) as keypair_nations,
+    (SELECT COUNT(DISTINCT c_nationkey) FROM sf_okta.tpch_sf1.customer) as okta_nations,
+    (SELECT COUNT(DISTINCT c_nationkey) FROM sf_mfa.tpch_sf1.customer) as mfa_nations
+----
+25	25	25	25	25
+
+# Test 46: Compare Join Results Across All Auth Methods
+query IIIII
+SELECT 
+    (SELECT COUNT(*) FROM sf_password.tpch_sf1.customer c JOIN sf_password.tpch_sf1.orders o ON c.c_custkey = o.o_custkey LIMIT 100) as password_joins,
+    (SELECT COUNT(*) FROM sf_oauth.tpch_sf1.customer c JOIN sf_oauth.tpch_sf1.orders o ON c.c_custkey = o.o_custkey LIMIT 100) as oauth_joins,
+    (SELECT COUNT(*) FROM sf_keypair.tpch_sf1.customer c JOIN sf_keypair.tpch_sf1.orders o ON c.c_custkey = o.o_custkey LIMIT 100) as keypair_joins,
+    (SELECT COUNT(*) FROM sf_okta.tpch_sf1.customer c JOIN sf_okta.tpch_sf1.orders o ON c.c_custkey = o.o_custkey LIMIT 100) as okta_joins,
+    (SELECT COUNT(*) FROM sf_mfa.tpch_sf1.customer c JOIN sf_mfa.tpch_sf1.orders o ON c.c_custkey = o.o_custkey LIMIT 100) as mfa_joins
+----
+100	100	100	100	100
+
+# Test 47: Compare Schema Discovery Across All Auth Methods
+query IIIII
+SELECT 
+    (SELECT COUNT(*) FROM sf_password.information_schema.schemata WHERE schema_name = 'TPCH_SF1') as password_schemas,
+    (SELECT COUNT(*) FROM sf_oauth.information_schema.schemata WHERE schema_name = 'TPCH_SF1') as oauth_schemas,
+    (SELECT COUNT(*) FROM sf_keypair.information_schema.schemata WHERE schema_name = 'TPCH_SF1') as keypair_schemas,
+    (SELECT COUNT(*) FROM sf_okta.information_schema.schemata WHERE schema_name = 'TPCH_SF1') as okta_schemas,
+    (SELECT COUNT(*) FROM sf_mfa.information_schema.schemata WHERE schema_name = 'TPCH_SF1') as mfa_schemas
+----
+1	1	1	1	1
+
+#############################################
+# CLEANUP - DETACH ALL AND DROP SECRETS
+#############################################
+
+# Test 48: Detach Password Connection
+statement ok
+DETACH sf_password;
+
+# Test 49: Detach OAuth Connection
+statement ok
+DETACH sf_oauth;
+
+# Test 50: Detach Key Pair Connection
+statement ok
+DETACH sf_keypair;
+
+# Test 51: Detach Okta Connection
+statement ok
+DETACH sf_okta;
+
+# Test 52: Detach MFA Connection
+statement ok
+DETACH sf_mfa;
+
+# Test 53: Verify All Connections Detached
+query I
+SELECT COUNT(*) FROM duckdb_databases() WHERE database_name LIKE 'sf_%'
+----
+0
+
+# Test 54: Drop Password Secret
+statement ok
+DROP SECRET IF EXISTS sf_password_secret;
+
+# Test 55: Drop OAuth Secret
+statement ok
+DROP SECRET IF EXISTS sf_oauth_secret;
+
+# Test 56: Drop Key Pair Secret
+statement ok
+DROP SECRET IF EXISTS sf_keypair_secret;
+
+# Test 57: Drop Okta Secret
+statement ok
+DROP SECRET IF EXISTS sf_okta_secret;
+
+# Test 58: Drop MFA Secret
+statement ok
+DROP SECRET IF EXISTS sf_mfa_secret;
+
+# Test 59: Verify All Secrets Dropped
+query I
+SELECT COUNT(*) FROM duckdb_secrets() WHERE name LIKE 'sf_%_secret'
+----
+0
+
+# Test 60: Final Verification - Clean State
+query TT
+SELECT type, name FROM duckdb_secrets() WHERE type = 'snowflake' ORDER BY name
+----
+

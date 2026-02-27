@@ -1,5 +1,6 @@
 #include "snowflake_config.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #include <sstream>
 #include <regex>
@@ -36,12 +37,18 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 		else if (key == "role") {
 			config.role = value;
 		} else if (key == "auth_type") {
-			if (value == "password") {
+			if (StringUtil::CIEquals(value, "password")) {
 				config.auth_type = SnowflakeAuthType::PASSWORD;
-			} else if (value == "oauth") {
+			} else if (StringUtil::CIEquals(value, "oauth")) {
 				config.auth_type = SnowflakeAuthType::OAUTH;
-			} else if (value == "key_pair") {
+			} else if (StringUtil::CIEquals(value, "key_pair")) {
 				config.auth_type = SnowflakeAuthType::KEY_PAIR;
+			} else if (StringUtil::CIEquals(value, "ext_browser") || StringUtil::CIEquals(value, "externalbrowser")) {
+				config.auth_type = SnowflakeAuthType::EXT_BROWSER;
+			} else if (StringUtil::CIEquals(value, "okta")) {
+				config.auth_type = SnowflakeAuthType::OKTA;
+			} else if (StringUtil::CIEquals(value, "mfa")) {
+				config.auth_type = SnowflakeAuthType::MFA;
 			}
 		} else if (key == "token") {
 			config.oauth_token = value;
@@ -51,12 +58,14 @@ SnowflakeConfig SnowflakeConfig::ParseConnectionString(const std::string &connec
 			config.private_key_file = value;
 		} else if (key == "private_key_password") {
 			config.private_key_password = value;
+		} else if (key == "okta_url") {
+			config.okta_url = value;
 		} else if (key == "query_timeout") {
 			config.query_timeout = std::stoi(value);
 		} else if (key == "keep_alive") {
-			config.keep_alive = (value == "true" || value == "1");
+			config.keep_alive = (StringUtil::CIEquals(value, "true") || value == "1");
 		} else if (key == "use_high_precision") {
-			config.use_high_precision = (value == "true" || value == "1");
+			config.use_high_precision = (StringUtil::CIEquals(value, "true") || value == "1");
 		}
 	}
 
@@ -86,6 +95,21 @@ std::string SnowflakeConfig::ToString() const {
 	} else if (auth_type == SnowflakeAuthType::KEY_PAIR) {
 		oss << "auth_type=key_pair;";
 		oss << "private_key=" << private_key << ";";
+		if (!private_key_file.empty()) {
+			oss << "private_key_file=" << private_key_file << ";";
+		}
+		if (!private_key_password.empty()) {
+			oss << "private_key_password=" << private_key_password << ";";
+		}
+	} else if (auth_type == SnowflakeAuthType::EXT_BROWSER) {
+		oss << "auth_type=ext_browser;";
+	} else if (auth_type == SnowflakeAuthType::OKTA) {
+		oss << "auth_type=okta;";
+		if (!okta_url.empty()) {
+			oss << "okta_url=" << okta_url << ";";
+		}
+	} else if (auth_type == SnowflakeAuthType::MFA) {
+		oss << "auth_type=mfa;";
 	}
 	oss << "query_timeout=" << query_timeout << ";";
 	oss << "keep_alive=" << (keep_alive ? "true" : "false") << ";";
@@ -97,7 +121,8 @@ bool SnowflakeConfig::operator==(const SnowflakeConfig &other) const {
 	return (account == other.account && username == other.username && password == other.password &&
 	        warehouse == other.warehouse && database == other.database && role == other.role &&
 	        auth_type == other.auth_type && oauth_token == other.oauth_token && private_key == other.private_key &&
-	        query_timeout == other.query_timeout && keep_alive == other.keep_alive);
+	        private_key_file == other.private_key_file && private_key_password == other.private_key_password &&
+	        okta_url == other.okta_url && query_timeout == other.query_timeout && keep_alive == other.keep_alive);
 }
 
 } // namespace snowflake

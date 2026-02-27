@@ -54,6 +54,14 @@ string SnowflakeSecret::GetSchema() const {
 	return "";
 }
 
+string SnowflakeSecret::GetRole() const {
+	Value value;
+	if (TryGetValue("role", value) || TryGetValue("ROLE", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
 string SnowflakeSecret::GetAuthType() const {
 	Value value;
 	// Try both lowercase and uppercase variants
@@ -94,6 +102,14 @@ string SnowflakeSecret::GetToken() const {
 	Value value;
 	// Try both lowercase and uppercase variants
 	if (TryGetValue("token", value) || TryGetValue("TOKEN", value)) {
+		return value.GetValue<string>();
+	}
+	return "";
+}
+
+string SnowflakeSecret::GetOktaUrl() const {
+	Value value;
+	if (TryGetValue("okta_url", value) || TryGetValue("OKTA_URL", value)) {
 		return value.GetValue<string>();
 	}
 	return "";
@@ -151,9 +167,8 @@ void SnowflakeSecret::Validate() const {
 		// password auth (default)
 		string pw = GetPassword();
 		if (pw.empty()) {
-			throw InvalidInputException(
-			    "Snowflake secret requires 'password' field (or use auth_type 'key_pair' with "
-			    "'private_key'/'private_key_file', or auth_type 'oauth' with 'token')");
+			throw InvalidInputException("Snowflake secret requires 'password' field (or use auth_type 'key_pair' with "
+			                            "'private_key'/'private_key_file', or auth_type 'oauth' with 'token')");
 		}
 	}
 }
@@ -191,8 +206,8 @@ unique_ptr<BaseSecret> SnowflakeSecret::Deserialize(Deserializer &deserializer, 
 }
 
 //! Helper to find option with case-insensitive key lookup
-static case_insensitive_map_t<Value>::const_iterator FindOptionCaseInsensitive(
-    const case_insensitive_map_t<Value> &options, const string &key) {
+static case_insensitive_map_t<Value>::const_iterator
+FindOptionCaseInsensitive(const case_insensitive_map_t<Value> &options, const string &key) {
 	// DuckDB's case_insensitive_map_t should handle this, but let's be explicit
 	auto it = options.find(key);
 	if (it != options.end()) {
@@ -217,7 +232,8 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 	// Always required fields
 	vector<string> always_required = {"user", "account", "database"};
 	// Conditionally required (password OR private_key/private_key_file based on auth_type)
-	vector<string> auth_fields = {"password", "private_key", "private_key_file", "private_key_password", "auth_type", "token"};
+	vector<string> auth_fields = {"password",  "private_key", "private_key_file", "private_key_password",
+	                              "auth_type", "token",       "okta_url"};
 	// Optional fields
 	vector<string> optional_fields = {"warehouse", "schema", "role"};
 
@@ -283,13 +299,14 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance) {
 	create_function.named_parameters["database"] = LogicalType::VARCHAR;
 	create_function.named_parameters["schema"] = LogicalType::VARCHAR;
 	create_function.named_parameters["role"] = LogicalType::VARCHAR;
-	// Keypair authentication support
+
+	// Authentication parameters
 	create_function.named_parameters["auth_type"] = LogicalType::VARCHAR;
+	create_function.named_parameters["token"] = LogicalType::VARCHAR;
+	create_function.named_parameters["okta_url"] = LogicalType::VARCHAR;
 	create_function.named_parameters["private_key"] = LogicalType::VARCHAR;
 	create_function.named_parameters["private_key_file"] = LogicalType::VARCHAR;
 	create_function.named_parameters["private_key_password"] = LogicalType::VARCHAR;
-	// OAuth authentication support
-	create_function.named_parameters["token"] = LogicalType::VARCHAR;
 
 	// Register the create function
 	secret_manager.RegisterSecretFunction(create_function, OnCreateConflict::ERROR_ON_CONFLICT);

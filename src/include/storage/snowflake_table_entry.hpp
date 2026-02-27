@@ -7,8 +7,8 @@
 namespace duckdb {
 namespace snowflake {
 
-//! SnowflakeTableBindData contains metadata for a snowflake table and informs the scan function the structure of the
-//! data it should receive
+//! SnowflakeTableBindData contains metadata for a snowflake table and informs
+//! the scan function the structure of the data it should receive
 struct SnowflakeTableBindData : public FunctionData {
 	string database_name;
 	string schema_name;

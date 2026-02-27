@@ -4,10 +4,12 @@
 namespace duckdb {
 namespace snowflake {
 
-// SnowflakeScanBindData inherits from ArrowScanFunctionData to leverage DuckDB's native Arrow integration
-// This allows us to use all of DuckDB's Arrow scanning infrastructure without reimplementing it
+// SnowflakeScanBindData inherits from ArrowScanFunctionData to leverage
+// DuckDB's native Arrow integration This allows us to use all of DuckDB's Arrow
+// scanning infrastructure without reimplementing it
 struct SnowflakeScanBindData : public ArrowScanFunctionData {
-	// The factory holds the ADBC connection and statement, keeping them alive during the scan
+	// The factory holds the ADBC connection and statement, keeping them alive
+	// during the scan
 	unique_ptr<SnowflakeArrowStreamFactory> factory;
 
 	explicit SnowflakeScanBindData(unique_ptr<SnowflakeArrowStreamFactory> factory_p)
@@ -19,11 +21,20 @@ struct SnowflakeScanBindData : public ArrowScanFunctionData {
 	}
 };
 
-// static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableFunctionBindInput &input,
-//                                                   vector<LogicalType> &return_types, vector<string> &names);
+// static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context,
+// TableFunctionBindInput &input,
+//                                                   vector<LogicalType>
+//                                                   &return_types,
+//                                                   vector<string> &names);
 
 } // namespace snowflake
 
+// Get the snowflake_scan table function (pushdown disabled - user controls
+// query)
 TableFunction GetSnowflakeScanFunction();
+
+// Get the table scan function for ATTACH
+// enable_pushdown: whether to enable filter and projection pushdown
+TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown);
 
 } // namespace duckdb

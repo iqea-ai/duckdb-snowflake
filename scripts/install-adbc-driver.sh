@@ -127,37 +127,6 @@ get_duckdb_platform() {
     esac
 }
 
-# Determine installation directory
-get_install_dir() {
-    # Check if running inside DuckDB extension build
-    if [ -n "$DUCKDB_EXTENSION_DIR" ]; then
-        INSTALL_DIR="$DUCKDB_EXTENSION_DIR"
-    # Check for local adbc_drivers directory (for development)
-    elif [ -d "./adbc_drivers" ]; then
-        INSTALL_DIR="./adbc_drivers"
-    # Default to DuckDB extension directory (same location as community extensions)
-    else
-        # Get home directory
-        if [ -n "$HOME" ]; then
-            HOME_DIR="$HOME"
-        else
-            HOME_DIR="$(cd ~ && pwd)"
-        fi
-
-        # Get DuckDB version and platform
-        get_duckdb_version
-        get_duckdb_platform
-
-        # Use the same directory structure as DuckDB extensions
-        # ~/.duckdb/extensions/<version>/<platform>/
-        INSTALL_DIR="${HOME_DIR}/.duckdb/extensions/${DUCKDB_VERSION}/${DUCKDB_PLATFORM}"
-    fi
-
-    # Create directory if it doesn't exist
-    mkdir -p "$INSTALL_DIR"
-    print_info "Installation directory: $INSTALL_DIR"
-}
-
 # Check for required tools
 check_dependencies() {
     # Check for curl or wget
@@ -301,16 +270,39 @@ verify_installation() {
 
 # Main installation flow
 main() {
+    detect_platform
+    check_dependencies
+    get_duckdb_version
+
     echo ""
     echo "════════════════════════════════════════════════════════════════"
     echo "     DuckDB Snowflake ADBC Driver Installer"
-    echo "     Version: ${DRIVER_VERSION}"
+    echo "     DuckDB Version: ${DUCKDB_VERSION}"
     echo "════════════════════════════════════════════════════════════════"
     echo ""
 
-    detect_platform
-    check_dependencies
-    get_install_dir
+    get_duckdb_platform
+
+    # Determine installation directory
+    if [ -n "$DUCKDB_EXTENSION_DIR" ]; then
+        INSTALL_DIR="$DUCKDB_EXTENSION_DIR"
+    else
+        # Get home directory
+        if [ -n "$HOME" ]; then
+            HOME_DIR="$HOME"
+        else
+            HOME_DIR="$(cd ~ && pwd)"
+        fi
+
+        # Use the same directory structure as DuckDB extensions
+        # ~/.duckdb/extensions/<version>/<platform>/
+        INSTALL_DIR="${HOME_DIR}/.duckdb/extensions/${DUCKDB_VERSION}/${DUCKDB_PLATFORM}"
+    fi
+
+    # Create directory if it doesn't exist
+    mkdir -p "$INSTALL_DIR"
+    print_info "Installation directory: $INSTALL_DIR"
+
     download_driver
     extract_driver
     verify_installation

@@ -6,7 +6,7 @@
 namespace duckdb {
 namespace snowflake {
 
-enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR };
+enum class SnowflakeAuthType { PASSWORD, OAUTH, KEY_PAIR, EXT_BROWSER, OKTA, MFA };
 
 struct SnowflakeConfig {
 	std::string account;
@@ -17,9 +17,10 @@ struct SnowflakeConfig {
 	std::string username;
 	std::string password;
 	std::string oauth_token;
-	std::string private_key;          // Inline PKCS8 key content
-	std::string private_key_file;     // Path to PKCS8 key file (preferred)
+	std::string private_key;      // Inline PKCS8 key content
+	std::string private_key_file; // Path to PKCS8 key file (preferred)
 	std::string private_key_password;
+	std::string okta_url;
 	int32_t query_timeout = 300; // seconds
 	bool keep_alive = true;
 	bool use_high_precision = true; // When false, DECIMAL(p,0) converts to INT64
@@ -58,6 +59,9 @@ public:
 		HashCombine(seed, config.password);
 		HashCombine(seed, config.oauth_token);
 		HashCombine(seed, config.private_key);
+		HashCombine(seed, config.private_key_file);
+		HashCombine(seed, config.private_key_password);
+		HashCombine(seed, config.okta_url);
 
 		return seed;
 	}

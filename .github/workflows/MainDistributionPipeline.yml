@@ -13,26 +13,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  duckdb-main-build:
-    name: Build extension binaries (internal)
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
+  duckdb-stable-build:
+    name: Build extension binaries
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
-      duckdb_version: main
-      ci_tools_version: main
+      duckdb_version: v1.5-variegata
+      ci_tools_version: v1.5-variegata
       extension_name: snowflake
+      skip_tests: true  # Tests run in separate workflow with Snowflake credentials
+    secrets: inherit
 
   code-quality-check:
     name: Code Quality Check
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5-variegata
     with:
-      duckdb_version: main
-      ci_tools_version: main
+      duckdb_version: v1.5-variegata
+      ci_tools_version: v1.5-variegata
       extension_name: snowflake
       format_checks: 'format;tidy'
+    secrets: inherit
 
   build-complete-packages:
     name: Build complete extension package
-    needs: [duckdb-main-build, code-quality-check]
+    needs: [duckdb-stable-build, code-quality-check]
     runs-on: ubuntu-latest
     strategy:
       matrix:

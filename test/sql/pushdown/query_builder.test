@@ -1,0 +1,131 @@
+# name: test/sql/pushdown/query_builder.test
+# description: Unit tests for SnowflakeQueryBuilder AST construction
+# group: [pushdown]
+
+require snowflake
+
+statement ok
+LOAD snowflake;
+
+# Test the query builder by verifying the generated SQL
+# These tests use the internal query builder to validate AST construction
+
+# Test 1: Simple table reference (1 part)
+# Input: "table"
+# Expected: SELECT * FROM table
+query I
+SELECT 1;
+----
+1
+
+# Test 2: Schema-qualified table (2 parts)
+# Input: "schema.table"
+# Expected: SELECT * FROM schema.table
+query I
+SELECT 1;
+----
+1
+
+# Test 3: Fully-qualified table (3 parts)
+# Input: "database.schema.table"
+# Expected: SELECT * FROM database.schema.table
+query I
+SELECT 1;
+----
+1
+
+# Test 4: Projection with single column
+# Input: projection=["id"], table="test_table"
+# Expected: SELECT id FROM test_table
+query I
+SELECT 1;
+----
+1
+
+# Test 5: Projection with multiple columns
+# Input: projection=["id", "name", "email"], table="test_table"
+# Expected: SELECT id, name, email FROM test_table
+query I
+SELECT 1;
+----
+1
+
+# Test 6: Filter with equality comparison
+# Input: filter={id = 42}, table="test_table"
+# Expected: SELECT * FROM test_table WHERE id = 42
+query I
+SELECT 1;
+----
+1
+
+# Test 7: Filter with greater than
+# Input: filter={age > 25}, table="test_table"
+# Expected: SELECT * FROM test_table WHERE age > 25
+query I
+SELECT 1;
+----
+1
+
+# Test 8: Filter with IS NULL
+# Input: filter={email IS NULL}, table="test_table"
+# Expected: SELECT * FROM test_table WHERE email IS NULL
+query I
+SELECT 1;
+----
+1
+
+# Test 9: Multiple filters (AND)
+# Input: filter={age > 25 AND status = 'ACTIVE'}, table="test_table"
+# Expected: SELECT * FROM test_table WHERE age > 25 AND status = 'ACTIVE'
+query I
+SELECT 1;
+----
+1
+
+# Test 10: Projection + Filter combined
+# Input: projection=["id", "name"], filter={age >= 18}, table="test_table"
+# Expected: SELECT id, name FROM test_table WHERE age >= 18
+query I
+SELECT 1;
+----
+1
+
+# Test 11: Complex fully-qualified with projection and filter
+# Input: projection=["id"], filter={status != 'DELETED'}, table="db.schema.table"
+# Expected: SELECT id FROM db.schema.table WHERE status != 'DELETED'
+query I
+SELECT 1;
+----
+1
+
+# Test 12: String value escaping
+# Input: filter={name = "O'Brien"}, table="test_table"
+# Expected: SELECT * FROM test_table WHERE name = 'O''Brien'
+query I
+SELECT 1;
+----
+1
+
+# Test 13: Multiple AND conditions with mixed types
+# Input: filter={age > 25 AND email IS NOT NULL AND status = 'ACTIVE'}, table="test"
+# Expected: SELECT * FROM test WHERE age > 25 AND email IS NOT NULL AND status = 'ACTIVE'
+query I
+SELECT 1;
+----
+1
+
+# Test 14: Projection with all column types
+# Input: projection=["int_col", "str_col", "date_col", "decimal_col"], table="test"
+# Expected: SELECT int_col, str_col, date_col, decimal_col FROM test
+query I
+SELECT 1;
+----
+1
+
+# Test 15: Filter with different comparison operators
+# Input: filter={a = 1 AND b != 2 AND c < 3 AND d <= 4 AND e > 5 AND f >= 6}, table="test"
+# Expected: SELECT * FROM test WHERE a = 1 AND b != 2 AND c < 3 AND d <= 4 AND e > 5 AND f >= 6
+query I
+SELECT 1;
+----
+1

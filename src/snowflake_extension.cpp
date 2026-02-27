@@ -40,7 +40,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(std::move(snowflake_version_function));
 
 #ifdef ADBC_AVAILABLE
-	// Register snowflake_scan table function (only available when ADBC is available)
+	// Register snowflake_scan table function (only available when ADBC is
+	// available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
 	loader.RegisterFunction(std::move(snowflake_scan_function));
 
@@ -51,8 +52,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// ADBC not available - register a placeholder function that throws an error
 	auto snowflake_scan_function =
 	    TableFunction("snowflake_scan", {}, [](ClientContext &context, TableFunctionInput &data, DataChunk &output) {
-		    throw NotImplementedException(
-		        "snowflake_scan is not available on this platform (ADBC driver not supported)");
+		    throw NotImplementedException("snowflake_scan is not available on this "
+		                                  "platform (ADBC driver not supported)");
 	    });
 	loader.RegisterFunction(std::move(snowflake_scan_function));
 #endif

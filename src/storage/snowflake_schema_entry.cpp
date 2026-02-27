@@ -17,8 +17,20 @@ optional_ptr<CatalogEntry> SnowflakeSchemaEntry::LookupEntry(CatalogTransaction 
 	if (!CatalogTypeIsSupported(lookup_info.GetCatalogType())) {
 		return nullptr;
 	}
+	const auto &entry_name = lookup_info.GetEntryName();
+	// If the table entry contains dots, user likely supplied too many parts in
+	// the SELECT path. Remind them of the required catalog.schema.table format.
+	if (entry_name.find('.') != string::npos) {
+		const auto &alias = catalog.GetName();
+		throw BinderException("Invalid table reference '%s'. SELECT paths must have exactly three "
+		                      "parts: catalog.schema.table.\n"
+		                      "Use your ATTACH alias for the catalog (e.g., '%s'), followed by "
+		                      "schema and table.\n"
+		                      "Example: SELECT * FROM %s.information_schema.tables;",
+		                      entry_name.c_str(), alias.c_str(), alias.c_str());
+	}
 
-	return tables->GetEntry(transaction.GetContext(), lookup_info.GetEntryName());
+	return tables->GetEntry(transaction.GetContext(), entry_name);
 }
 
 void SnowflakeSchemaEntry::Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) {

@@ -1,4 +1,5 @@
 #include "storage/snowflake_catalog_set.hpp"
+#include "duckdb/common/string_util.hpp"
 
 namespace duckdb {
 namespace snowflake {
@@ -6,9 +7,11 @@ optional_ptr<CatalogEntry> SnowflakeCatalogSet::GetEntry(ClientContext &context,
 	TryLoadEntries(context);
 
 	lock_guard<mutex> lock(entry_lock);
-	auto entry_it = entries.find(name);
-	if (entry_it != entries.end()) {
-		return entry_it->second.get();
+	// Case-insensitive lookup to match DuckDB convention
+	for (const auto &entry : entries) {
+		if (StringUtil::CIEquals(entry.first, name)) {
+			return entry.second.get();
+		}
 	}
 
 	return nullptr;

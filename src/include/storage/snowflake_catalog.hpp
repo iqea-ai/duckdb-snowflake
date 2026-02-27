@@ -10,10 +10,15 @@ namespace snowflake {
 
 class SnowflakeCatalog : public Catalog {
 public:
-	// Constructor - connection info
-	SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config);
+	// Constructor - connection info and options
+	SnowflakeCatalog(AttachedDatabase &db_p, const SnowflakeConfig &config, const SnowflakeOptions &options_p);
 
 	~SnowflakeCatalog() override;
+
+	// Getter for options
+	const SnowflakeOptions &GetOptions() const {
+		return options;
+	}
 
 	// Required overrides
 	void Initialize(bool load_builtin) override;
@@ -57,6 +62,7 @@ public:
 private:
 	shared_ptr<SnowflakeClient> client;
 	SnowflakeSchemaSet schemas;
+	SnowflakeOptions options;
 };
 } // namespace snowflake
 } // namespace duckdb

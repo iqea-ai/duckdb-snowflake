@@ -12,7 +12,8 @@ public:
 	    : SnowflakeCatalogSet(catalog), client(std::move(client)) {
 	}
 
-	//! Fetches all schemas from Snowflake and creates SnowflakeSchemaEntry objects for each
+	//! Fetches all schemas from Snowflake and creates SnowflakeSchemaEntry
+	//! objects for each
 	void LoadEntries(ClientContext &context) override;
 
 private:

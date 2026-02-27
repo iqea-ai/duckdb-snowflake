@@ -10,7 +10,8 @@ namespace snowflake {
 // Forward declaration
 class SnowflakeTableSet;
 
-//! SnowflakeSchemaEntry represents a single schema in Snowflake, which contains a collection of tables
+//! SnowflakeSchemaEntry represents a single schema in Snowflake, which contains
+//! a collection of tables
 class SnowflakeSchemaEntry : public SchemaCatalogEntry {
 public:
 	SnowflakeSchemaEntry(Catalog &catalog, const string &schema_name, CreateSchemaInfo &info,

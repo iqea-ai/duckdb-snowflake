@@ -95,8 +95,9 @@ LogicalType SnowflakeTypeToLogicalType(const std::string &snowflake_type_str) {
 	// NUMBER type (Snowflake's variable precision numeric)
 	if (base_type == "NUMBER") {
 		if (paren_pos == std::string::npos) {
-			// TODO create user setting to specify the behavior here. DOUBLE is relatively safe but loses precision for
-			// large decimals, and could possibly be losing out on performance.
+			// TODO create user setting to specify the behavior here. DOUBLE is
+			// relatively safe but loses precision for large decimals, and could
+			// possibly be losing out on performance.
 			return LogicalType::DOUBLE;
 		}
 
@@ -153,7 +154,8 @@ LogicalType SnowflakeTypeToLogicalType(const std::string &snowflake_type_str) {
 }
 
 LogicalType ConvertNumber(uint8_t precision, uint8_t scale) {
-	// For integer types (scale = 0), map to appropriate integer type based on precision
+	// For integer types (scale = 0), map to appropriate integer type based on
+	// precision
 	if (scale == 0) {
 		if (precision <= 2U) {
 			return LogicalType::TINYINT; // -128 to 127
@@ -169,8 +171,9 @@ LogicalType ConvertNumber(uint8_t precision, uint8_t scale) {
 		}
 	}
 
-	// For any type with scale > 0 or precision > 18, use DECIMAL to maintain exact precision
-	// This ensures no loss of precision for financial/monetary calculations
+	// For any type with scale > 0 or precision > 18, use DECIMAL to maintain
+	// exact precision This ensures no loss of precision for financial/monetary
+	// calculations
 	return LogicalType::DECIMAL(precision, scale);
 }
 } // namespace snowflake

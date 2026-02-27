@@ -1,0 +1,35 @@
+# Credentials and sensitive data
+.env
+*.env
+
+# DuckDB database files
+*.db
+*.duckdb
+
+# Data files
+*.parquet
+*.csv
+
+# Analysis outputs
+reports/
+*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+snowflake_key.p8
+snowflake_key.pub
+.env.keypair

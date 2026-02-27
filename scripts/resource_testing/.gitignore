@@ -1,0 +1,39 @@
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
+
+# Results files
+*.csv
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+~/.tmp/
+
+
+
+
+
+

@@ -166,14 +166,18 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	}
 
 	if (driver_path.empty()) {
-		// Use the filename and hope it's in the library path
-		driver_path = SNOWFLAKE_ADBC_LIB;
-		DPRINT("Driver not found in search paths, using: %s\n", driver_path.c_str());
+		// Driver not found - provide helpful error message
+		std::string error_msg =
+		    std::string("ADBC Snowflake driver (") + SNOWFLAKE_ADBC_LIB + ") not found. Searched locations:\n";
+		for (const auto &path : search_paths) {
+			error_msg += "  - " + path + "\n";
+		}
+
+		throw IOException(error_msg);
 	}
 
-	DPRINT("Snowflake ADBC Driver Loading:\n");
-	DPRINT("Extension directory: %s\n", extension_dir.c_str());
-	DPRINT("Final driver path: %s\n", driver_path.c_str());
+	LOG_INFO("Extension directory: %s\n", extension_dir.c_str());
+	LOG_INFO("Final adbc driver path: %s\n", driver_path.c_str());
 
 	status = AdbcDatabaseSetOption(&database, "driver", driver_path.c_str(), &error);
 	CheckError(status, "Failed to set Snowflake driver path", &error);
@@ -182,33 +186,51 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 	status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.account", config.account.c_str(), &error);
 	CheckError(status, "Failed to set account", &error);
 
-	if (!config.username.empty()) {
-		status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
-		CheckError(status, "Failed to set username", &error);
-	}
-
 	// Set authentication based on type
 	// Reference: https://arrow.apache.org/adbc/current/driver/snowflake.html
 	switch (config.auth_type) {
 	case SnowflakeAuthType::PASSWORD:
 		// Default auth type is auth_snowflake (password-based)
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		if (!config.password.empty()) {
 			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
 			CheckError(status, "Failed to set password", &error);
 		}
 		break;
 	case SnowflakeAuthType::OAUTH:
-		// Set auth type to auth_oauth
+		// For External OAuth - use auth_oauth and provide token
+		LOG_DEBUG("Configuring OAuth authentication\n");
+
+		// Set auth_type to 'auth_oauth' - this is the correct ADBC parameter
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_oauth", &error);
-		CheckError(status, "Failed to set auth type to oauth", &error);
+		CheckError(status, "Failed to set OAuth auth type", &error);
+		LOG_DEBUG("Set auth_type=auth_oauth\n");
+
+		// Set the OAuth token
 		if (!config.oauth_token.empty()) {
-			status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.auth_token",
-			                               config.oauth_token.c_str(), &error);
+			LOG_DEBUG("Setting token (length: %zu)\n", config.oauth_token.length());
+			status =
+			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
 			CheckError(status, "Failed to set OAuth token", &error);
+			LOG_DEBUG("Token set successfully\n");
+		}
+
+		// Username may still be needed for user mapping
+		if (!config.username.empty()) {
+			LOG_DEBUG("Setting username: %s\n", config.username.c_str());
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username for OAuth", &error);
 		}
 		break;
 	case SnowflakeAuthType::KEY_PAIR: {
 		// Set auth type to auth_jwt for keypair authentication
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
 		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_jwt", &error);
 		CheckError(status, "Failed to set auth type to jwt", &error);
 
@@ -254,6 +276,40 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		}
 		break;
 	}
+	case SnowflakeAuthType::EXT_BROWSER:
+		// External browser SSO - username may be optional depending on SSO setup
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_ext_browser", &error);
+		CheckError(status, "Failed to set external browser auth type", &error);
+		break;
+	case SnowflakeAuthType::OKTA:
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_okta", &error);
+		CheckError(status, "Failed to set Okta auth type", &error);
+		if (!config.okta_url.empty()) {
+			status =
+			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_okta_url", config.okta_url.c_str(), &error);
+			CheckError(status, "Failed to set Okta URL", &error);
+		}
+		break;
+	case SnowflakeAuthType::MFA:
+		if (!config.username.empty()) {
+			status = AdbcDatabaseSetOption(&database, "username", config.username.c_str(), &error);
+			CheckError(status, "Failed to set username", &error);
+		}
+		status = AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_type", "auth_mfa", &error);
+		CheckError(status, "Failed to set MFA auth type", &error);
+		if (!config.password.empty()) {
+			status = AdbcDatabaseSetOption(&database, "password", config.password.c_str(), &error);
+			CheckError(status, "Failed to set password for MFA", &error);
+		}
+		break;
 	}
 
 	// Set optional parameters
@@ -371,7 +427,8 @@ void SnowflakeClient::CheckError(const AdbcStatusCode status, const std::string 
 		}
 	}
 
-	// Only release if the error has a release function and hasn't been released already
+	// Only release if the error has a release function and hasn't been released
+	// already
 	if (error && error->release && error->message) {
 		error->release(error);
 	}
@@ -384,9 +441,8 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
 
-	for (auto &schema : schemas) {
-		schema = StringUtil::Lower(schema);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	return schemas;
 }
@@ -401,9 +457,8 @@ vector<string> SnowflakeClient::ListTables(ClientContext &context, const string 
 	auto result = ExecuteAndGetStrings(context, table_name_query, {"table_name"});
 	auto table_names = result[0];
 
-	for (auto &table_name : table_names) {
-		table_name = StringUtil::Lower(table_name);
-	}
+	// Preserve original case from Snowflake (typically UPPERCASE)
+	// Case-insensitive lookup is handled in SnowflakeCatalogSet::GetEntry
 
 	DPRINT("ListTables returning %zu tables\n", table_names.size());
 	for (const auto &table_name : table_names) {
@@ -435,7 +490,9 @@ vector<SnowflakeColumn> SnowflakeClient::GetTableInfo(ClientContext &context, co
 	vector<SnowflakeColumn> col_data;
 
 	for (idx_t row_idx = 0; row_idx < result[0].size(); row_idx++) {
-		string column_name = StringUtil::Lower(result[0][row_idx]);
+		// Preserve original case from Snowflake (typically UPPERCASE)
+		// DuckDB handles case-insensitive column lookup internally
+		string column_name = result[0][row_idx];
 		string data_type = result[1][row_idx];
 		string nullable = result[2][row_idx];
 
@@ -520,7 +577,7 @@ vector<vector<string>> SnowflakeClient::ExecuteAndGetStrings(ClientContext &cont
 
 		for (idx_t col_idx = 0; col_idx < static_cast<idx_t>(arrow_array.n_children); col_idx++) {
 			ArrowArray *column = arrow_array.children[col_idx];
-			if (column && column->buffers && column->n_buffers >= 3L) {
+			if (column && column->buffers && static_cast<size_t>(column->n_buffers) >= 3) {
 				// For string columns: buffer[0] is validity, buffer[1] is offsets, buffer[2] is data
 				const int32_t *offsets = static_cast<const int32_t *>(column->buffers[1]);
 				const char *data = static_cast<const char *>(column->buffers[2]);
@@ -616,8 +673,7 @@ unique_ptr<DataChunk> SnowflakeClient::ExecuteAndGetChunk(ClientContext &context
 	ArrowTableSchema arrow_table;
 	vector<string> actual_names;
 	vector<LogicalType> actual_types;
-	ArrowTableFunction::PopulateArrowTableSchema(context, arrow_table,
-	                                             schema_wrapper.arrow_schema);
+	ArrowTableFunction::PopulateArrowTableSchema(context, arrow_table, schema_wrapper.arrow_schema);
 	actual_names = arrow_table.GetNames();
 	actual_types = arrow_table.GetTypes();
 

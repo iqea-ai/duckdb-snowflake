@@ -1,0 +1,484 @@
+# name: test/sql/pushdown/hybrid_queries.test
+# description: Test hybrid queries combining Snowflake and local DuckDB data
+# group: [pushdown]
+
+require snowflake
+
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+statement ok
+LOAD snowflake;
+
+# Create test secret
+statement ok
+CREATE SECRET test_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}'
+);
+
+# Enable profiling for hybrid query metrics
+statement ok
+PRAGMA enable_profiling;
+
+statement ok
+PRAGMA profiling_output='hybrid_queries_profile.json';
+
+#############################################
+# Section 1: snowflake_query with Local Tables
+#############################################
+
+# Test 1: Create local DuckDB tables for hybrid testing
+statement ok
+CREATE TABLE local_orders AS 
+SELECT * FROM (VALUES 
+    (1, 'Priority', 100.50),
+    (2, 'Standard', 250.75),
+    (3, 'Express', 500.00),
+    (4, 'Economy', 75.25),
+    (5, 'Priority', 150.00)
+) AS t(order_id, priority, amount);
+
+statement ok
+CREATE TABLE local_categories AS
+SELECT * FROM (VALUES
+    ('BUILDING', 'Construction'),
+    ('AUTOMOBILE', 'Vehicles'),
+    ('HOUSEHOLD', 'Home Goods'),
+    ('MACHINERY', 'Equipment'),
+    ('FURNITURE', 'Furnishings')
+) AS t(segment, category_name);
+
+# Test 2: snowflake_query JOIN local table
+# EXPLAIN shows hybrid execution: Snowflake scan + local table scan + hash join
+statement ok
+EXPLAIN 
+SELECT 
+    sf.L_ORDERKEY,
+    sf.L_PARTKEY,
+    lo.priority,
+    lo.amount
+FROM snowflake_query(
+    'SELECT L_ORDERKEY, L_PARTKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 5',
+    'test_secret'
+) sf
+JOIN local_orders lo ON sf.L_ORDERKEY = lo.order_id
+ORDER BY sf.L_ORDERKEY, sf.L_PARTKEY;
+
+# Verify query executes and returns data (not checking exact values)
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT 
+        sf.L_ORDERKEY,
+        sf.L_PARTKEY,
+        lo.priority,
+        lo.amount
+    FROM snowflake_query(
+        'SELECT L_ORDERKEY, L_PARTKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 5',
+        'test_secret'
+    ) sf
+    JOIN local_orders lo ON sf.L_ORDERKEY = lo.order_id
+    ORDER BY sf.L_ORDERKEY, sf.L_PARTKEY
+    LIMIT 5
+);
+----
+true
+
+# Test 3: snowflake_query with local aggregation
+# EXPLAIN shows Snowflake data feeding into local aggregation
+statement ok
+EXPLAIN
+SELECT 
+    priority,
+    COUNT(*) as order_count,
+    SUM(amount) as total_amount
+FROM (
+    SELECT 
+        sf.L_ORDERKEY,
+        lo.priority,
+        lo.amount
+    FROM snowflake_query(
+        'SELECT L_ORDERKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 5',
+        'test_secret'
+    ) sf
+    JOIN local_orders lo ON sf.L_ORDERKEY = lo.order_id
+)
+GROUP BY priority
+ORDER BY order_count DESC;
+
+# Verify aggregation works and returns multiple priority levels
+query I
+SELECT COUNT(DISTINCT priority) >= 2 FROM (
+    SELECT 
+        priority,
+        COUNT(*) as order_count,
+        SUM(amount) as total_amount
+    FROM (
+        SELECT 
+            sf.L_ORDERKEY,
+            lo.priority,
+            lo.amount
+        FROM snowflake_query(
+            'SELECT L_ORDERKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 5',
+            'test_secret'
+        ) sf
+        JOIN local_orders lo ON sf.L_ORDERKEY = lo.order_id
+    )
+    GROUP BY priority
+);
+----
+true
+
+# Test 4: UNION of snowflake_query and local data
+# EXPLAIN shows UNION ALL execution
+statement ok
+EXPLAIN
+SELECT order_id, 'SNOWFLAKE' as source FROM snowflake_query(
+    'SELECT L_ORDERKEY as order_id FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 3',
+    'test_secret'
+)
+UNION ALL
+SELECT order_id, 'LOCAL' as source FROM local_orders;
+
+# Verify UNION works and returns data from both sources
+query I
+SELECT COUNT(DISTINCT source) = 2 FROM (
+    SELECT L_ORDERKEY as order_id, 'SNOWFLAKE' as source FROM snowflake_query(
+        'SELECT L_ORDERKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 3',
+        'test_secret'
+    )
+    UNION ALL
+    SELECT order_id, 'LOCAL' as source FROM local_orders
+);
+----
+true
+
+# Verify we get data from both Snowflake and local
+query I
+SELECT COUNT(*) FROM (
+    SELECT source, COUNT(*) as cnt
+    FROM (
+        SELECT L_ORDERKEY as order_id, 'SNOWFLAKE' as source FROM snowflake_query(
+            'SELECT L_ORDERKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.LINEITEM WHERE L_ORDERKEY <= 3',
+            'test_secret'
+        )
+        UNION ALL
+        SELECT order_id, 'LOCAL' as source FROM local_orders
+    )
+    GROUP BY source
+    HAVING cnt > 0
+);
+----
+2
+
+#############################################
+# Section 2: ATTACH with Local Tables (Pushdown Enabled)
+#############################################
+
+# Test 5: ATTACH with pushdown for hybrid queries
+statement ok
+ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
+
+# Test 6: ATTACH JOIN local table (with pushdown)
+# EXPLAIN shows filter pushed to Snowflake, then joined with local data
+statement ok
+EXPLAIN
+SELECT 
+    c.C_CUSTKEY,
+    c.C_MKTSEGMENT,
+    lc.category_name,
+    c.C_ACCTBAL
+FROM snow.tpch_sf1.customer c
+JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+WHERE c.C_CUSTKEY <= 10
+ORDER BY c.C_CUSTKEY;
+
+# Verify query executes and returns exactly 10 customers
+query I
+SELECT COUNT(*) = 10 FROM (
+    SELECT 
+        c.C_CUSTKEY,
+        c.C_MKTSEGMENT,
+        lc.category_name,
+        c.C_ACCTBAL
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY <= 10
+    ORDER BY c.C_CUSTKEY
+);
+----
+true
+
+# Verify all customers have matching categories
+query I
+SELECT COUNT(*) = 10 FROM (
+    SELECT 
+        c.C_CUSTKEY,
+        c.C_MKTSEGMENT,
+        lc.category_name
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY <= 10 AND lc.category_name IS NOT NULL
+);
+----
+true
+
+# Test 7: Hybrid aggregation - Snowflake + local dimension
+# EXPLAIN shows Snowflake aggregation then joined with local lookup
+statement ok
+EXPLAIN
+SELECT 
+    lc.category_name,
+    COUNT(c.C_CUSTKEY) as customer_count,
+    AVG(c.C_ACCTBAL) as avg_balance
+FROM snow.tpch_sf1.customer c
+JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+WHERE c.C_ACCTBAL > 5000
+GROUP BY lc.category_name
+ORDER BY customer_count DESC;
+
+# Verify aggregation returns multiple categories with customers
+query I
+SELECT COUNT(*) >= 3 FROM (
+    SELECT 
+        lc.category_name,
+        COUNT(c.C_CUSTKEY) as customer_count,
+        AVG(c.C_ACCTBAL) as avg_balance
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_ACCTBAL > 5000
+    GROUP BY lc.category_name
+    HAVING COUNT(c.C_CUSTKEY) > 1000
+);
+----
+true
+
+# Test 8: Complex hybrid query with multiple local tables
+# Create another local table
+statement ok
+CREATE TABLE local_regions AS
+SELECT * FROM (VALUES
+    (0, 'AFRICA', 'African Region'),
+    (1, 'AMERICA', 'American Region'),
+    (2, 'ASIA', 'Asian Region'),
+    (3, 'EUROPE', 'European Region'),
+    (4, 'MIDDLE EAST', 'Middle Eastern Region')
+) AS t(region_key, region_name, description);
+
+# Test 9: Three-way join: Snowflake ATTACH + 2 local tables
+# EXPLAIN shows Snowflake join then joined with local tables
+statement ok
+EXPLAIN
+SELECT 
+    n.N_NAME,
+    lr.description as region_desc,
+    lc.category_name,
+    COUNT(*) as customer_count
+FROM snow.tpch_sf1.customer c
+JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+JOIN local_regions lr ON n.N_REGIONKEY = lr.region_key
+JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+WHERE c.C_CUSTKEY <= 1000
+GROUP BY n.N_NAME, lr.description, lc.category_name
+ORDER BY customer_count DESC
+LIMIT 5;
+
+# Verify three-way join returns results with all dimensions populated
+query I
+SELECT COUNT(*) = 5 FROM (
+    SELECT 
+        n.N_NAME,
+        lr.description as region_desc,
+        lc.category_name,
+        COUNT(*) as customer_count
+    FROM snow.tpch_sf1.customer c
+    JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+    JOIN local_regions lr ON n.N_REGIONKEY = lr.region_key
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY <= 1000
+    GROUP BY n.N_NAME, lr.description, lc.category_name
+    ORDER BY customer_count DESC
+    LIMIT 5
+);
+----
+true
+
+# Verify all results have valid region descriptions
+query I
+SELECT MIN(LENGTH(region_desc)) > 0 FROM (
+    SELECT 
+        lr.description as region_desc
+    FROM snow.tpch_sf1.customer c
+    JOIN snow.tpch_sf1.nation n ON c.C_NATIONKEY = n.N_NATIONKEY
+    JOIN local_regions lr ON n.N_REGIONKEY = lr.region_key
+    WHERE c.C_CUSTKEY <= 1000
+    LIMIT 5
+);
+----
+true
+
+#############################################
+# Section 3: BETWEEN and Range Queries in Hybrid Scenarios
+#############################################
+
+# Test 10: BETWEEN with hybrid query
+# EXPLAIN shows BETWEEN pushed to Snowflake, then joined locally
+statement ok
+EXPLAIN
+SELECT 
+    c.C_CUSTKEY,
+    c.C_ACCTBAL,
+    lc.category_name
+FROM snow.tpch_sf1.customer c
+JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+WHERE c.C_CUSTKEY BETWEEN 100 AND 200
+  AND c.C_ACCTBAL BETWEEN 1000 AND 5000
+ORDER BY c.C_CUSTKEY;
+
+# Verify BETWEEN filters work and return some results
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT 
+        c.C_CUSTKEY,
+        c.C_ACCTBAL,
+        lc.category_name
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY BETWEEN 100 AND 200
+      AND c.C_ACCTBAL BETWEEN 1000 AND 5000
+    ORDER BY c.C_CUSTKEY
+    LIMIT 5
+);
+----
+true
+
+# Verify BETWEEN constraints are respected
+query I
+SELECT COUNT(*) FROM (
+    SELECT c.C_CUSTKEY, c.C_ACCTBAL
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY BETWEEN 100 AND 200
+      AND c.C_ACCTBAL BETWEEN 1000 AND 5000
+) WHERE C_CUSTKEY < 100 OR C_CUSTKEY > 200 OR C_ACCTBAL < 1000 OR C_ACCTBAL > 5000;
+----
+0
+
+# Test 11: Multiple BETWEEN conditions across Snowflake and local tables
+statement ok
+EXPLAIN
+SELECT 
+    l.L_ORDERKEY,
+    l.L_LINENUMBER,
+    lo.priority,
+    lo.amount
+FROM snow.tpch_sf1.lineitem l
+JOIN local_orders lo ON l.L_ORDERKEY = lo.order_id
+WHERE l.L_ORDERKEY BETWEEN 1 AND 5
+  AND l.L_LINENUMBER BETWEEN 1 AND 3
+  AND lo.amount BETWEEN 50 AND 300
+ORDER BY l.L_ORDERKEY, l.L_LINENUMBER;
+
+# Verify multiple BETWEEN conditions work
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT 
+        l.L_ORDERKEY,
+        l.L_LINENUMBER,
+        lo.priority,
+        lo.amount
+    FROM snow.tpch_sf1.lineitem l
+    JOIN local_orders lo ON l.L_ORDERKEY = lo.order_id
+    WHERE l.L_ORDERKEY BETWEEN 1 AND 5
+      AND l.L_LINENUMBER BETWEEN 1 AND 3
+      AND lo.amount BETWEEN 50 AND 300
+);
+----
+true
+
+# Verify all BETWEEN constraints are enforced
+query I
+SELECT COUNT(*) FROM (
+    SELECT l.L_ORDERKEY, l.L_LINENUMBER, lo.amount
+    FROM snow.tpch_sf1.lineitem l
+    JOIN local_orders lo ON l.L_ORDERKEY = lo.order_id
+    WHERE l.L_ORDERKEY BETWEEN 1 AND 5
+      AND l.L_LINENUMBER BETWEEN 1 AND 3
+      AND lo.amount BETWEEN 50 AND 300
+) WHERE L_ORDERKEY > 5 OR L_LINENUMBER > 3 OR amount < 50 OR amount > 300;
+----
+0
+
+#############################################
+# Section 4: Performance Comparison
+#############################################
+
+# Test 12: Measure hybrid query performance with profiling
+# This query combines Snowflake aggregation with local enrichment
+
+# Verify complex aggregation with CASE statements works
+query I
+SELECT COUNT(*) = 5 FROM (
+    SELECT 
+        lc.category_name,
+        COUNT(*) as total_customers,
+        SUM(CASE WHEN c.C_ACCTBAL > 0 THEN 1 ELSE 0 END) as positive_balance,
+        SUM(CASE WHEN c.C_ACCTBAL < 0 THEN 1 ELSE 0 END) as negative_balance
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY BETWEEN 1 AND 10000
+    GROUP BY lc.category_name
+);
+----
+true
+
+# Verify all categories have both positive and negative balances
+query I
+SELECT COUNT(*) = 5 FROM (
+    SELECT 
+        lc.category_name,
+        SUM(CASE WHEN c.C_ACCTBAL > 0 THEN 1 ELSE 0 END) as positive_balance,
+        SUM(CASE WHEN c.C_ACCTBAL < 0 THEN 1 ELSE 0 END) as negative_balance
+    FROM snow.tpch_sf1.customer c
+    JOIN local_categories lc ON c.C_MKTSEGMENT = lc.segment
+    WHERE c.C_CUSTKEY BETWEEN 1 AND 10000
+    GROUP BY lc.category_name
+    HAVING positive_balance > 0 AND negative_balance > 0
+);
+----
+true
+
+# Disable profiling and show results
+statement ok
+PRAGMA disable_profiling;
+
+# Note: pragma_last_profiling_output() not available in DuckDB v1.4.0
+# Profile data is written to hybrid_queries_profile.json instead
+
+#############################################
+# Cleanup
+#############################################
+
+statement ok
+DROP TABLE local_orders;
+
+statement ok
+DROP TABLE local_categories;
+
+statement ok
+DROP TABLE local_regions;
+
+statement ok
+DETACH snow;
+
+statement ok
+DROP SECRET test_secret;
+
