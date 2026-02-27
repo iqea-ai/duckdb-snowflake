@@ -50,10 +50,13 @@ jobs:
           fi
           
           echo "Running Snowflake extension tests..."
-          # Run only Snowflake extension tests, not all DuckDB tests
-          # Run patterns separately (matches test/README.md examples)
-          ./build/release/test/unittest "test/sql/snowflake_*.test"
-          ./build/release/test/unittest "test/sql/pushdown/*.test"
+          # Patterns ending in ".test" are intercepted as file paths and never reach
+          # Catch2's filter engine - they will silently match nothing.
+          # Use name wildcards WITHOUT the .test suffix, or group tags.
+          echo "Running test/sql/snowflake_*.test files..."
+          ./build/release/test/unittest "*snowflake_*"
+          echo "Running test/sql/pushdown/*.test files..."
+          ./build/release/test/unittest "[pushdown]"
       
       - name: Upload test results and profiling data
         if: always()
