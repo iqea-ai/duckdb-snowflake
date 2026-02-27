@@ -31,18 +31,22 @@ make test_debug     # Debug mode with verbose output
 ### Run Specific Test Files
 ```bash
 # From the repository root
-./build/release/test/unittest "test/sql/snowflake_basic_connectivity.test"
-./build/release/test/unittest "test/sql/pushdown/hybrid_queries.test"
+./build/release/test/unittest "*snowflake_basic_connectivity*"
+./build/release/test/unittest "*hybrid_queries*"
 ```
 
 ### Run Tests by Pattern
 ```bash
-# Run all pushdown tests
-./build/release/test/unittest "test/sql/pushdown/*.test"
+# Run all snowflake_*.test files
+./build/release/test/unittest "*snowflake_*"
 
-# Run specific test name
-./build/release/test/unittest "*/snowflake_*"
+# Run all pushdown/*.test files (by group tag)
+./build/release/test/unittest "[pushdown]"
 ```
+
+> **Note:** Patterns ending in `.test` are intercepted by DuckDB's test runner as file
+> paths and never reach Catch2's filter engine — they silently match nothing. Always use
+> name wildcards **without** the `.test` suffix, or use group tags like `[pushdown]`.
 
 ## Test Categories
 
