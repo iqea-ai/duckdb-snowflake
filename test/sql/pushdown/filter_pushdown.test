@@ -30,9 +30,9 @@ CREATE SECRET test_secret (
 statement ok
 ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
 
-# Enable profiling to measure pushdown effectiveness
+# Enable profiling to measure pushdown effectiveness (json format for v1.5+)
 statement ok
-PRAGMA enable_profiling;
+PRAGMA enable_profiling='json';
 
 statement ok
 PRAGMA profiling_output='filter_pushdown_profile.json';

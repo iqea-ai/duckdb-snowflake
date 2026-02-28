@@ -31,9 +31,9 @@ CREATE SECRET test_secret (
 statement ok
 ATTACH '' AS snow (TYPE snowflake, SECRET test_secret, READ_ONLY, enable_pushdown true);
 
-# Enable profiling for pushdown comparison
+# Enable profiling for pushdown comparison (json format for v1.5+)
 statement ok
-PRAGMA enable_profiling;
+PRAGMA enable_profiling='json';
 
 statement ok
 PRAGMA profiling_output='pushdown_enabled_profile.json';
@@ -98,9 +98,9 @@ DETACH snow;
 statement ok
 ATTACH '' AS snow_no_push (TYPE snowflake, SECRET test_secret, READ_ONLY);
 
-# Enable profiling for comparison
+# Enable profiling for comparison (json format for v1.5+)
 statement ok
-PRAGMA enable_profiling;
+PRAGMA enable_profiling='json';
 
 statement ok
 PRAGMA profiling_output='pushdown_disabled_profile.json';

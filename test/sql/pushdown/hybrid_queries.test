@@ -25,9 +25,9 @@ CREATE SECRET test_secret (
     DATABASE '${SNOWFLAKE_DATABASE}'
 );
 
-# Enable profiling for hybrid query metrics
+# Enable profiling for hybrid query metrics (json format required for .json output in v1.5+)
 statement ok
-PRAGMA enable_profiling;
+PRAGMA enable_profiling='json';
 
 statement ok
 PRAGMA profiling_output='hybrid_queries_profile.json';
