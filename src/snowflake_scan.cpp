@@ -57,10 +57,11 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	bind_data->factory->filter_pushdown_enabled = false;
 	bind_data->factory->projection_pushdown_enabled = false;
 
-	// Get the schema from Snowflake using ADBC's ExecuteSchema
-	// This executes the query with schema-only mode to get column information
-	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(bind_data->factory.get()),
-	                        bind_data->schema_root.arrow_schema);
+	// Execute the full query now and cache the stream. This is necessary because
+	// SnowflakeGetArrowSchema (ExecuteSchema) leaves the ADBC driver in a state
+	// where a second statement cannot be created on the same connection, causing
+	// a segfault (SIGSEGV) when SnowflakeProduceArrowScan runs.
+	SnowflakeExecuteAndCacheStream(bind_data->factory.get(), bind_data->schema_root.arrow_schema);
 
 	// Use DuckDB's Arrow integration to populate the table type information
 	// This converts Arrow schema to DuckDB types and handles all type mappings

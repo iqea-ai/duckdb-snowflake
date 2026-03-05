@@ -43,6 +43,15 @@ public:
 unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr,
                                                               ArrowStreamParameters &parameters) {
 	auto factory = reinterpret_cast<SnowflakeArrowStreamFactory *>(factory_ptr);
+
+	// If the query was pre-executed at bind time (snowflake_query path), return
+	// the cached stream directly without re-executing.
+	if (factory->has_cached_stream) {
+		auto wrapper = make_uniq<SnowflakeArrowArrayStreamWrapper>();
+		wrapper->InitializeFromADBC(&factory->cached_stream);
+		factory->has_cached_stream = false;
+		return std::move(wrapper);
+	}
 	DPRINT("SnowflakeProduceArrowScan: factory=%p, statement_initialized=%d\n", (void *)factory,
 	       factory->statement_initialized);
 	DPRINT("SnowflakeProduceArrowScan: pushdown enabled: filter=%d, projection=%d\n", factory->filter_pushdown_enabled,
@@ -211,6 +220,50 @@ void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema)
 			}
 		}
 		throw IOException(error_msg);
+	}
+}
+
+void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema) {
+	AdbcError error;
+	std::memset(&error, 0, sizeof(error));
+	AdbcStatusCode status = AdbcStatementNew(factory->connection->GetConnection(), &factory->statement, &error);
+	if (status != ADBC_STATUS_OK) {
+		throw IOException("Failed to create statement for snowflake_query");
+	}
+	factory->statement_initialized = true;
+
+	status = AdbcStatementSetSqlQuery(&factory->statement, factory->modified_query.c_str(), &error);
+	if (status != ADBC_STATUS_OK) {
+		std::string msg = "Failed to set query: ";
+		if (error.message) {
+			msg += error.message;
+			if (error.release)
+				error.release(&error);
+		}
+		throw IOException(msg);
+	}
+
+	int64_t rows_affected;
+	AdbcError exec_error;
+	std::memset(&exec_error, 0, sizeof(exec_error));
+	status = AdbcStatementExecuteQuery(&factory->statement, &factory->cached_stream, &rows_affected, &exec_error);
+	if (status != ADBC_STATUS_OK) {
+		std::string msg = "Failed to execute snowflake_query: ";
+		if (exec_error.message) {
+			msg += exec_error.message;
+			if (exec_error.release)
+				exec_error.release(&exec_error);
+		}
+		throw IOException(msg);
+	}
+	factory->has_cached_stream = true;
+
+	std::memset(&schema, 0, sizeof(schema));
+	if (factory->cached_stream.get_schema) {
+		int rc = factory->cached_stream.get_schema(&factory->cached_stream, &schema);
+		if (rc != 0) {
+			throw IOException("Failed to get schema from snowflake_query stream");
+		}
 	}
 }
 

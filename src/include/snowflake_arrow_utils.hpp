@@ -29,6 +29,11 @@ struct SnowflakeArrowStreamFactory {
 	AdbcStatement statement;
 	bool statement_initialized = false;
 
+	// Pre-executed Arrow stream from bind time (used by snowflake_query to avoid
+	// double-executing the query: once for schema in bind, once for data in scan)
+	struct ArrowArrayStream cached_stream;
+	bool has_cached_stream = false;
+
 	// Pushdown configuration
 	bool filter_pushdown_enabled = false;
 	bool projection_pushdown_enabled = false;
@@ -41,6 +46,7 @@ struct SnowflakeArrowStreamFactory {
 	SnowflakeArrowStreamFactory(shared_ptr<snowflake::SnowflakeClient> conn, const std::string &query_str)
 	    : connection(std::move(conn)), query(query_str), modified_query(query_str) {
 		std::memset(&statement, 0, sizeof(statement));
+		std::memset(&cached_stream, 0, sizeof(cached_stream));
 	}
 
 	~SnowflakeArrowStreamFactory() {
@@ -48,6 +54,10 @@ struct SnowflakeArrowStreamFactory {
 		if (statement_initialized) {
 			AdbcError error;
 			AdbcStatementRelease(&statement, &error);
+		}
+		// Release cached stream if present
+		if (has_cached_stream && cached_stream.release) {
+			cached_stream.release(&cached_stream);
 		}
 	}
 
@@ -73,5 +83,11 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 //   ArrowArrayStream* schema: Output parameter that will be filled with the
 //   Arrow schema
 void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema);
+
+// Execute the query and cache the resulting Arrow stream in the factory.
+// Also populates schema from the stream's get_schema callback.
+// Used by snowflake_query bind to avoid double-execution: the cached stream is
+// returned by SnowflakeProduceArrowScan instead of re-executing the query.
+void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema);
 
 } // namespace duckdb
