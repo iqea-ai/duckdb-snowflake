@@ -1,0 +1,54 @@
+# name: test/sql/snowflake_query_ddl.test
+# description: Test snowflake_query with non-SELECT statements (DESC TABLE, SHOW, etc.)
+#              Regression test for segfault caused by AdbcStatementExecuteSchema consuming
+#              the ADBC statement for DDL/metadata commands, leaving nothing for ProduceArrowScan.
+# group: [sql]
+
+require snowflake
+
+# Require environment variables to be set
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PASSWORD
+
+require-env SNOWFLAKE_DATABASE
+
+statement ok
+LOAD snowflake;
+
+# Create a secret for snowflake_query to use
+statement ok
+CREATE SECRET sf_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    PASSWORD '${SNOWFLAKE_PASSWORD}',
+    DATABASE '${SNOWFLAKE_DATABASE}'
+);
+
+# Test 1: DESC TABLE via snowflake_query must not segfault and must return rows
+# This is a regression test: previously snowflake_query crashed with SIGSEGV
+# for non-SELECT statements because AdbcStatementExecuteSchema eagerly executed
+# DDL commands, consuming the ADBC statement before ProduceArrowScan could use it.
+query I
+SELECT COUNT(*) > 0 FROM snowflake_query('DESC TABLE ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER', 'sf_secret');
+----
+true
+
+# Test 2: SHOW TABLES via snowflake_query must not segfault and must return rows
+query I
+SELECT COUNT(*) > 0 FROM snowflake_query('SHOW TABLES IN SCHEMA ${SNOWFLAKE_DATABASE}.TPCH_SF1', 'sf_secret');
+----
+true
+
+# Test 3: SELECT query still works correctly after the fix
+query I
+SELECT COUNT(*) FROM snowflake_query('SELECT C_CUSTKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER LIMIT 5', 'sf_secret');
+----
+5
+
+# Cleanup
+statement ok
+DROP SECRET IF EXISTS sf_secret;
