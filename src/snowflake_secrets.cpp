@@ -77,51 +77,23 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 
 		// Extract authentication-specific fields
 		auto auth_type_str = snowflake_secret->GetAuthType();
-		LOG_INFO("GetCredentials: auth_type_str = '%s'\n", auth_type_str.c_str());
-		if (!auth_type_str.empty()) {
-			// Parse auth_type string to enum (case-insensitive)
-			if (StringUtil::CIEquals(auth_type_str, "oauth")) {
-				config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
-				config.oauth_token = snowflake_secret->GetToken();
-				LOG_INFO("Set auth_type to OAUTH, token length = %zu\n", config.oauth_token.length());
-			} else if (StringUtil::CIEquals(auth_type_str, "key_pair")) {
-				config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
-				config.private_key = snowflake_secret->GetPrivateKey();
-				config.private_key_file = snowflake_secret->GetPrivateKeyFile();
-				config.private_key_password = snowflake_secret->GetPrivateKeyPassword();
-				LOG_INFO("Set auth_type to KEY_PAIR\n");
-			} else if (StringUtil::CIEquals(auth_type_str, "ext_browser") ||
-			           StringUtil::CIEquals(auth_type_str, "externalbrowser")) {
-				config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
-				LOG_INFO("Set auth_type to EXT_BROWSER\n");
-			} else if (StringUtil::CIEquals(auth_type_str, "okta")) {
-				config.auth_type = snowflake::SnowflakeAuthType::OKTA;
-				config.okta_url = snowflake_secret->GetOktaUrl();
-				LOG_INFO("Set auth_type to OKTA\n");
-			} else if (StringUtil::CIEquals(auth_type_str, "mfa")) {
-				config.auth_type = snowflake::SnowflakeAuthType::MFA;
-				LOG_INFO("Set auth_type to MFA\n");
-			} else {
-				// Unknown auth_type - log warning but don't fail (for backward compatibility)
-				LOG_WARN("Unknown auth_type '%s', using default PASSWORD auth\n", auth_type_str.c_str());
-			}
-		} else {
-			LOG_INFO("auth_type_str is empty, using default PASSWORD auth\n");
-		}
-
-		// Handle auth type
-		std::string auth_type = snowflake_secret->GetAuthType();
-		std::string private_key = snowflake_secret->GetPrivateKey();
-		std::string private_key_file = snowflake_secret->GetPrivateKeyFile();
-		std::string private_key_password = snowflake_secret->GetPrivateKeyPassword();
-		if (auth_type == "key_pair") {
-			config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
-			config.private_key = private_key;
-			config.private_key_file = private_key_file;
-			config.private_key_password = private_key_password;
-		} else if (auth_type == "oauth") {
+		if (StringUtil::CIEquals(auth_type_str, "oauth")) {
 			config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
 			config.oauth_token = snowflake_secret->GetToken();
+		} else if (StringUtil::CIEquals(auth_type_str, "key_pair")) {
+			config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
+			config.private_key = snowflake_secret->GetPrivateKey();
+			config.private_key_file = snowflake_secret->GetPrivateKeyFile();
+			config.private_key_password = snowflake_secret->GetPrivateKeyPassword();
+		} else if (StringUtil::CIEquals(auth_type_str, "ext_browser") ||
+		           StringUtil::CIEquals(auth_type_str, "externalbrowser")) {
+			config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
+		} else if (StringUtil::CIEquals(auth_type_str, "okta")) {
+			config.auth_type = snowflake::SnowflakeAuthType::OKTA;
+			config.okta_url = snowflake_secret->GetOktaUrl();
+		} else if (StringUtil::CIEquals(auth_type_str, "mfa")) {
+			config.auth_type = snowflake::SnowflakeAuthType::MFA;
+			config.password = snowflake_secret->GetPassword();
 		} else {
 			// Default to password auth
 			config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;

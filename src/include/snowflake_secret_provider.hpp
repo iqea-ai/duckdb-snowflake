@@ -17,9 +17,6 @@ public:
 		redact_keys.insert("private_key_password");
 		redact_keys.insert("token");
 		redact_keys.insert("secret");
-		redact_keys.insert("token");
-		redact_keys.insert("private_key");
-		redact_keys.insert("private_key_passphrase");
 	}
 
 	//! Get Snowflake-specific fields
