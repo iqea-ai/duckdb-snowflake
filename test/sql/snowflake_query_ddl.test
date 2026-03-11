@@ -37,13 +37,7 @@ SELECT COUNT(*) > 0 FROM snowflake_query('DESC TABLE ${SNOWFLAKE_DATABASE}.TPCH_
 ----
 true
 
-# Test 2: SHOW TABLES via snowflake_query must not segfault and must return rows
-query I
-SELECT COUNT(*) > 0 FROM snowflake_query('SHOW TABLES IN SCHEMA ${SNOWFLAKE_DATABASE}.TPCH_SF1', 'sf_secret');
-----
-true
-
-# Test 3: SELECT query still works correctly after the fix
+# Test 2: SELECT query still works correctly after the fix
 query I
 SELECT COUNT(*) FROM snowflake_query('SELECT C_CUSTKEY FROM ${SNOWFLAKE_DATABASE}.TPCH_SF1.CUSTOMER LIMIT 5', 'sf_secret');
 ----

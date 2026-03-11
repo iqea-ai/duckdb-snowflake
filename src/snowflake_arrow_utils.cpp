@@ -254,6 +254,14 @@ void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowS
 			if (exec_error.release)
 				exec_error.release(&exec_error);
 		}
+		if (IsAuthenticationError(msg)) {
+			auto &client_manager = snowflake::SnowflakeClientManager::GetInstance();
+			client_manager.InvalidateConnection(factory->connection->GetConfig());
+			DPRINT("Authentication error detected, connection invalidated for retry\n");
+			throw IOException(msg +
+			                  "\n\nThe authentication token may have expired. "
+			                  "Please retry your query - a fresh connection will be established automatically.");
+		}
 		throw IOException(msg);
 	}
 	factory->has_cached_stream = true;
