@@ -1,8 +1,9 @@
 # name: test/sql/snowflake_query_ddl.test
 # description: Test snowflake_query with non-SELECT statements (DESC TABLE, SHOW, etc.)
+# group: [sql]
+
 #              Regression test for segfault caused by AdbcStatementExecuteSchema consuming
 #              the ADBC statement for DDL/metadata commands, leaving nothing for ProduceArrowScan.
-# group: [sql]
 
 require snowflake
 
