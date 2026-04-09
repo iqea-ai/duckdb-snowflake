@@ -231,7 +231,7 @@ void SnowflakeClient::InitializeDatabase(const SnowflakeConfig &config) {
 		if (!config.oauth_token.empty()) {
 			LOG_DEBUG("Setting token (length: %zu)\n", config.oauth_token.length());
 			status =
-			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.auth_token", config.oauth_token.c_str(), &error);
+			    AdbcDatabaseSetOption(&database, "adbc.snowflake.sql.client_option.auth_token", config.oauth_token.c_str(), &error);
 			CheckError(status, "Failed to set OAuth token", &error);
 			LOG_DEBUG("Token set successfully\n");
 		}
