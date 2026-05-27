@@ -178,12 +178,15 @@ void SnowflakeSecret::Validate() const {
 		    token_value.GetValue<string>().empty()) {
 			throw InvalidInputException("Snowflake secret with auth_type 'oauth' requires 'token' field");
 		}
+	} else if (StringUtil::CIEquals(auth_type, "ext_browser") || StringUtil::CIEquals(auth_type, "externalbrowser")) {
+		// External browser SSO flow — no credential field required on the secret
 	} else {
-		// password auth (default)
+		// password auth (default), and also MFA / Okta which still need a password
 		string pw = GetPassword();
 		if (pw.empty()) {
 			throw InvalidInputException("Snowflake secret requires 'password' field (or use auth_type 'key_pair' with "
-			                            "'private_key'/'private_key_file', or auth_type 'oauth' with 'token')");
+			                            "'private_key'/'private_key_file', auth_type 'oauth' with 'token', or "
+			                            "auth_type 'ext_browser')");
 		}
 	}
 }
