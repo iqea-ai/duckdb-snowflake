@@ -21,7 +21,7 @@ jobs:
       - name: Setup DuckDB version
         run: |
           cd duckdb
-          git checkout v1.5.2 || git checkout main
+          git checkout v1.5.3 || git checkout main
       
       - name: Install dependencies
         run: |

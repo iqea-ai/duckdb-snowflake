@@ -19,20 +19,20 @@ env:
 jobs:
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5.2
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5.3
     with:
-      duckdb_version: v1.5.2
-      ci_tools_version: v1.5.2
+      duckdb_version: v1.5.3
+      ci_tools_version: v1.5.3
       extension_name: snowflake
       skip_tests: true  # Tests run in separate workflow with Snowflake credentials
     secrets: inherit
 
   code-quality-check:
     name: Code Quality Check
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5.2
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5.3
     with:
-      duckdb_version: v1.5.2
-      ci_tools_version: v1.5.2
+      duckdb_version: v1.5.3
+      ci_tools_version: v1.5.3
       extension_name: snowflake
       format_checks: 'format;tidy'
     secrets: inherit
@@ -67,7 +67,7 @@ jobs:
       - name: Download extension artifact
         uses: actions/download-artifact@v4
         with:
-          name: snowflake-v1.5.2-extension-${{ matrix.platform.name }}
+          name: snowflake-v1.5.3-extension-${{ matrix.platform.name }}
           path: ./extension-artifact
 
       - name: Download ADBC driver
@@ -134,7 +134,7 @@ jobs:
           
           # Create zip archive
           cd package
-          ZIP_FILE="../snowflake-extension-1.5.2-${{ matrix.platform.name }}.zip"
+          ZIP_FILE="../snowflake-extension-1.5.3-${{ matrix.platform.name }}.zip"
           if ! zip -r "$ZIP_FILE" snowflake/; then
             echo "ERROR: Failed to create zip archive"
             exit 1
@@ -143,14 +143,14 @@ jobs:
           
           # Display package info
           echo "Package contents:"
-          unzip -l snowflake-extension-1.5.2-${{ matrix.platform.name }}.zip
+          unzip -l snowflake-extension-1.5.3-${{ matrix.platform.name }}.zip
           echo ""
           echo "Package size:"
-          ls -lh snowflake-extension-1.5.2-${{ matrix.platform.name }}.zip
+          ls -lh snowflake-extension-1.5.3-${{ matrix.platform.name }}.zip
           
       - name: Validate package size
         run: |
-          PACKAGE_FILE="snowflake-extension-1.5.2-${{ matrix.platform.name }}.zip"
+          PACKAGE_FILE="snowflake-extension-1.5.3-${{ matrix.platform.name }}.zip"
           if [ ! -f "$PACKAGE_FILE" ]; then
             echo "ERROR: Package file not found: $PACKAGE_FILE"
             exit 1
@@ -172,8 +172,8 @@ jobs:
       - name: Upload complete package
         uses: actions/upload-artifact@v4
         with:
-          name: snowflake-extension-1.5.2-${{ matrix.platform.name }}
-          path: snowflake-extension-1.5.2-${{ matrix.platform.name }}.zip
+          name: snowflake-extension-1.5.3-${{ matrix.platform.name }}
+          path: snowflake-extension-1.5.3-${{ matrix.platform.name }}.zip
           retention-days: 30
           if-no-files-found: error
 
