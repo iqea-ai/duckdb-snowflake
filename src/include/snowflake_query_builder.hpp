@@ -56,5 +56,12 @@ private:
 	static vector<unique_ptr<ParsedExpression>> BuildProjectionList(const vector<string> &projection_columns);
 };
 
+//! Quote a Snowflake identifier when its characters or case would otherwise
+//! make Snowflake's parser fold it to uppercase or reject it. Snowflake's
+//! unquoted-identifier rules: first char A-Z or _, subsequent A-Z, 0-9, _, $.
+//! Anything else (including lowercase) gets wrapped in double quotes with
+//! internal quotes escaped by doubling.
+string QuoteSnowflakeIdentifier(const string &name);
+
 } // namespace snowflake
 } // namespace duckdb

@@ -18,30 +18,119 @@
 namespace duckdb {
 namespace snowflake {
 
+string QuoteSnowflakeIdentifier(const string &name) {
+	if (name.empty()) {
+		return name;
+	}
+	auto is_first_ok = [](char c) {
+		return (c >= 'A' && c <= 'Z') || c == '_';
+	};
+	auto is_rest_ok = [](char c) {
+		return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$';
+	};
+	bool needs_quotes = !is_first_ok(name[0]);
+	for (size_t i = 1; !needs_quotes && i < name.size(); ++i) {
+		if (!is_rest_ok(name[i])) {
+			needs_quotes = true;
+		}
+	}
+	if (!needs_quotes) {
+		return name;
+	}
+	string out;
+	out.reserve(name.size() + 2);
+	out += '"';
+	for (char ch : name) {
+		if (ch == '"') {
+			out += '"';
+		}
+		out += ch;
+	}
+	out += '"';
+	return out;
+}
+
+//! Split a dotted identifier path on '.' boundaries while keeping quoted
+//! identifiers ("a.b.c") intact.
+static vector<string> SplitDottedIdentifier(const string &name) {
+	vector<string> out;
+	string current;
+	bool in_quotes = false;
+	for (size_t i = 0; i < name.size(); ++i) {
+		char ch = name[i];
+		if (ch == '"') {
+			// Doubled quote inside a quoted identifier is an escaped quote.
+			if (in_quotes && i + 1 < name.size() && name[i + 1] == '"') {
+				current += ch;
+				current += name[i + 1];
+				++i;
+				continue;
+			}
+			in_quotes = !in_quotes;
+			current += ch;
+		} else if (ch == '.' && !in_quotes) {
+			out.push_back(current);
+			current.clear();
+		} else {
+			current += ch;
+		}
+	}
+	out.push_back(current);
+	return out;
+}
+
+//! If the part is wrapped in double quotes, strip the outer quotes and
+//! collapse doubled internal "" back to a single ". Otherwise return as-is.
+static string UnquoteSnowflakeIdentifier(const string &part) {
+	if (part.size() < 2 || part.front() != '"' || part.back() != '"') {
+		return part;
+	}
+	string out;
+	out.reserve(part.size() - 2);
+	for (size_t i = 1; i + 1 < part.size(); ++i) {
+		if (part[i] == '"' && i + 2 < part.size() && part[i + 1] == '"') {
+			out += '"';
+			++i;
+		} else {
+			out += part[i];
+		}
+	}
+	return out;
+}
+
+//! Re-quote each dotted segment of a (possibly already-quoted) identifier
+//! path per Snowflake's rules.
+static string RequoteDottedIdentifier(const string &name) {
+	auto parts = SplitDottedIdentifier(name);
+	for (auto &p : parts) {
+		p = QuoteSnowflakeIdentifier(UnquoteSnowflakeIdentifier(p));
+	}
+	return StringUtil::Join(parts, ".");
+}
+
 string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<string> &projection_columns,
                                          TableFilterSet *filter_set, const vector<string> &column_names) {
+	// Snowflake folds unquoted identifiers to uppercase. DuckDB's AST writer
+	// emits lowercase identifiers without quotes (which DuckDB itself accepts
+	// case-insensitively), so we can't trust it to produce a Snowflake-valid
+	// FROM clause. Build the FROM clause manually with Snowflake-correct
+	// quoting and substitute it into the AST output via a placeholder that
+	// DuckDB will not rewrite.
+	auto split_parts = SplitDottedIdentifier(table_name);
+	if (split_parts.empty() || (split_parts.size() == 1 && split_parts[0].empty())) {
+		throw InvalidInputException("Invalid table name format: %s", table_name);
+	}
+
 	// Create a SelectStatement AST
 	auto select_stmt = make_uniq<SelectStatement>();
 	auto select_node = make_uniq<SelectNode>();
 
-	// 1. Build the FROM clause (table reference)
-	auto table_parts = StringUtil::Split(table_name, '.');
+	// 1. Build a placeholder FROM clause; we substitute the SF-quoted form
+	//    after AST serialization. The placeholder is all-uppercase / underscores
+	//    so DuckDB will not wrap it in quotes.
+	static const string from_placeholder = "__SNOWFLAKE_FROM_PLACEHOLDER__";
 	auto table_ref = make_uniq<BaseTableRef>();
-
-	// Assign parts from right to left: table <- schema <- catalog
-	size_t n = table_parts.size();
-	if (n == 0) {
-		throw InvalidInputException("Invalid table name format: %s", table_name);
-	}
-
-	table_ref->table_name = table_parts[n - 1];
-	if (n >= 2) {
-		table_ref->schema_name = table_parts[n - 2];
-	}
-	if (n >= 3) {
-		table_ref->catalog_name = table_parts[n - 3];
-	}
-
+	table_ref->table_name = from_placeholder;
 	select_node->from_table = std::move(table_ref);
 
 	// 2. Build the SELECT clause (projection list)
@@ -60,8 +149,11 @@ string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<
 	// 4. Attach the select node to the statement
 	select_stmt->node = std::move(select_node);
 
-	// 5. Serialize AST to SQL string
-	return select_stmt->ToString();
+	// 5. Serialize AST to SQL string and patch in the SF-quoted FROM clause
+	string sql = select_stmt->ToString();
+	const string sf_from = RequoteDottedIdentifier(table_name);
+	sql = StringUtil::Replace(sql, from_placeholder, sf_from);
+	return sql;
 }
 
 unique_ptr<ParsedExpression> SnowflakeQueryBuilder::BuildWhereExpression(TableFilterSet *filter_set,

@@ -4,6 +4,7 @@
 #include "snowflake_client_manager.hpp"
 #include "snowflake_scan.hpp"
 #include "snowflake_arrow_utils.hpp"
+#include "snowflake_query_builder.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
@@ -16,7 +17,8 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	       schema.name.c_str(), name.c_str());
 
 	auto &config = client->GetConfig();
-	string query = "SELECT * FROM " + config.database + "." + schema.name + "." + name;
+	string query = "SELECT * FROM " + QuoteSnowflakeIdentifier(config.database) + "." +
+	               QuoteSnowflakeIdentifier(schema.name) + "." + QuoteSnowflakeIdentifier(name);
 	DPRINT("SnowflakeTableEntry: Query = '%s'\n", query.c_str());
 
 	// TODO consider maintaining a thread-safe pool of connections in client, so

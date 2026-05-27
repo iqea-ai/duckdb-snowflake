@@ -1,6 +1,7 @@
 #include "snowflake_debug.hpp"
 #include "snowflake_client.hpp"
 #include "snowflake_types.hpp"
+#include "snowflake_query_builder.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/table/arrow.hpp"
@@ -456,7 +457,8 @@ void SnowflakeClient::CheckError(const AdbcStatusCode status, const std::string 
 }
 
 vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
-	const string schema_query = "SELECT schema_name FROM " + config.database + ".INFORMATION_SCHEMA.SCHEMATA";
+	const string schema_query =
+	    "SELECT schema_name FROM " + QuoteSnowflakeIdentifier(config.database) + ".INFORMATION_SCHEMA.SCHEMATA";
 	auto result = ExecuteAndGetStrings(context, schema_query, {"schema_name"});
 	auto schemas = result[0];
 
@@ -469,7 +471,8 @@ vector<string> SnowflakeClient::ListSchemas(ClientContext &context) {
 vector<string> SnowflakeClient::ListTables(ClientContext &context, const string &schema = "") {
 	DPRINT("ListTables called for schema: %s in database: %s\n", schema.c_str(), config.database.c_str());
 	const string upper_schema = StringUtil::Upper(schema);
-	const string table_name_query = "SELECT table_name FROM " + config.database + ".information_schema.tables" +
+	const string table_name_query = "SELECT table_name FROM " + QuoteSnowflakeIdentifier(config.database) +
+	                                ".information_schema.tables" +
 	                                (!schema.empty() ? " WHERE table_schema = '" + upper_schema + "'" : "");
 	DPRINT("Table query: %s\n", table_name_query.c_str());
 
@@ -491,7 +494,8 @@ vector<SnowflakeColumn> SnowflakeClient::GetTableInfo(ClientContext &context, co
 	const string upper_schema = StringUtil::Upper(schema);
 	const string upper_table = StringUtil::Upper(table_name);
 
-	const string table_info_query = "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM " + config.database +
+	const string table_info_query = "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM " +
+	                                QuoteSnowflakeIdentifier(config.database) +
 	                                ".information_schema.columns WHERE table_schema = '" + upper_schema +
 	                                "' AND table_name = '" + upper_table + "' ORDER BY ORDINAL_POSITION";
 
