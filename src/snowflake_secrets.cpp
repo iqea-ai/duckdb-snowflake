@@ -45,6 +45,28 @@ void SnowflakeSecretsHelper::StoreCredentials(ClientContext &context, const std:
 	SecretManager::Get(context).CreateSecret(context, input);
 }
 
+namespace {
+
+//! Look up a key in a KeyValueSecret using DuckDB's case-insensitive map.
+//! Returns empty string if missing or NULL.
+std::string GetSecretString(const KeyValueSecret &secret, const std::string &key) {
+	Value value;
+	if (secret.TryGetValue(key, value) && !value.IsNull()) {
+		return value.GetValue<std::string>();
+	}
+	return "";
+}
+
+int32_t GetSecretInt(const KeyValueSecret &secret, const std::string &key, int32_t default_value) {
+	Value value;
+	if (secret.TryGetValue(key, value) && !value.IsNull()) {
+		return value.GetValue<int32_t>();
+	}
+	return default_value;
+}
+
+} // namespace
+
 // Retrieve Snowflake config from a secret
 snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext &context,
                                                                   const std::string &profile_name) {
@@ -60,48 +82,50 @@ snowflake::SnowflakeConfig SnowflakeSecretsHelper::GetCredentials(ClientContext 
 			throw InvalidInputException("Snowflake profile not found: " + profile_name);
 		}
 
-		// Cast to SnowflakeSecret to access the snowflake-specific fields
-		auto *snowflake_secret = dynamic_cast<const SnowflakeSecret *>(secret_entry->secret.get());
-		if (!snowflake_secret) {
+		// Persistent secrets are deserialized at session start (before this
+		// extension loads its typed deserializer), so they may arrive as a plain
+		// KeyValueSecret rather than a SnowflakeSecret. Read fields through the
+		// KeyValueSecret API to handle both cases uniformly.
+		auto *kv_secret = dynamic_cast<const KeyValueSecret *>(secret_entry->secret.get());
+		if (!kv_secret || secret_entry->secret->GetType() != "snowflake") {
 			throw InvalidInputException("Invalid secret type for profile: " + profile_name);
 		}
 
-		// Extract all the credential values and build config
-		config.username = snowflake_secret->GetUser();
-		config.password = snowflake_secret->GetPassword();
-		config.account = snowflake_secret->GetAccount();
-		config.host = snowflake_secret->GetHost();
-		config.port = snowflake_secret->GetPort();
-		config.protocol = snowflake_secret->GetProtocol();
-		config.warehouse = snowflake_secret->GetWarehouse();
-		config.database = snowflake_secret->GetDatabase();
-		config.role = snowflake_secret->GetRole();
+		config.username = GetSecretString(*kv_secret, "user");
+		config.password = GetSecretString(*kv_secret, "password");
+		config.account = GetSecretString(*kv_secret, "account");
+		config.host = GetSecretString(*kv_secret, "host");
+		config.port = GetSecretInt(*kv_secret, "port", 443);
+		config.protocol = GetSecretString(*kv_secret, "protocol");
+		config.warehouse = GetSecretString(*kv_secret, "warehouse");
+		config.database = GetSecretString(*kv_secret, "database");
+		config.role = GetSecretString(*kv_secret, "role");
 		// Note: schema is not stored in SnowflakeConfig as per the struct
 		// definition
 
 		// Extract authentication-specific fields
-		auto auth_type_str = snowflake_secret->GetAuthType();
+		std::string auth_type_str = GetSecretString(*kv_secret, "auth_type");
+		if (auth_type_str.empty()) {
+			auth_type_str = "password";
+		}
 		if (StringUtil::CIEquals(auth_type_str, "oauth")) {
 			config.auth_type = snowflake::SnowflakeAuthType::OAUTH;
-			config.oauth_token = snowflake_secret->GetToken();
+			config.oauth_token = GetSecretString(*kv_secret, "token");
 		} else if (StringUtil::CIEquals(auth_type_str, "key_pair")) {
 			config.auth_type = snowflake::SnowflakeAuthType::KEY_PAIR;
-			config.private_key = snowflake_secret->GetPrivateKey();
-			config.private_key_file = snowflake_secret->GetPrivateKeyFile();
-			config.private_key_password = snowflake_secret->GetPrivateKeyPassword();
+			config.private_key = GetSecretString(*kv_secret, "private_key");
+			config.private_key_file = GetSecretString(*kv_secret, "private_key_file");
+			config.private_key_password = GetSecretString(*kv_secret, "private_key_password");
 		} else if (StringUtil::CIEquals(auth_type_str, "ext_browser") ||
 		           StringUtil::CIEquals(auth_type_str, "externalbrowser")) {
 			config.auth_type = snowflake::SnowflakeAuthType::EXT_BROWSER;
 		} else if (StringUtil::CIEquals(auth_type_str, "okta")) {
 			config.auth_type = snowflake::SnowflakeAuthType::OKTA;
-			config.okta_url = snowflake_secret->GetOktaUrl();
+			config.okta_url = GetSecretString(*kv_secret, "okta_url");
 		} else if (StringUtil::CIEquals(auth_type_str, "mfa")) {
 			config.auth_type = snowflake::SnowflakeAuthType::MFA;
-			config.password = snowflake_secret->GetPassword();
 		} else {
-			// Default to password auth
 			config.auth_type = snowflake::SnowflakeAuthType::PASSWORD;
-			config.password = snowflake_secret->GetPassword();
 		}
 
 	} catch (const std::exception &e) {
