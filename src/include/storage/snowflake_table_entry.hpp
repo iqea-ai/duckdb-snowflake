@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "snowflake_config.hpp"
 #include "snowflake_client.hpp"
 
@@ -62,6 +63,10 @@ public:
 private:
 	shared_ptr<SnowflakeClient> client;
 	bool columns_loaded = false;
+	//! Cached Arrow schema bytes from the first SnowflakeGetArrowSchema call.
+	//! Subsequent GetScanFunction binds deep-copy out of this instead of paying
+	//! another Snowflake roundtrip — see issue #33 (CREATE VIEW latency).
+	unique_ptr<ArrowSchemaWrapper> cached_schema_root;
 };
 } // namespace snowflake
 } // namespace duckdb

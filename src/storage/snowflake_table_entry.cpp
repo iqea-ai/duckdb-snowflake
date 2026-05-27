@@ -5,12 +5,23 @@
 #include "snowflake_scan.hpp"
 #include "snowflake_arrow_utils.hpp"
 #include "snowflake_query_builder.hpp"
+#include "duckdb/common/arrow/nanoarrow/nanoarrow.h"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 
 namespace duckdb {
 namespace snowflake {
+
+//! Deep-copy a previously cached ArrowSchema into `dst`. Uses nanoarrow's
+//! ArrowSchemaDeepCopy so `dst` ends up with its own release-callback-owned
+//! memory, decoupled from the cached source.
+static void CloneCachedSchema(const ArrowSchema &src, ArrowSchema &dst) {
+	auto rc = duckdb_nanoarrow::ArrowSchemaDeepCopy(const_cast<ArrowSchema *>(&src), &dst);
+	if (rc != 0) {
+		throw IOException("Failed to deep-copy cached Snowflake Arrow schema (nanoarrow rc=%d)", rc);
+	}
+}
 
 TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) {
 	DPRINT("SnowflakeTableEntry::GetScanFunction called for table %s.%s.%s\n", client->GetConfig().database.c_str(),
@@ -44,10 +55,22 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 	// Set pushdown settings on bind_data (critical for avoiding crashes!)
 	snowflake_bind_data->projection_pushdown_enabled = catalog_options.enable_pushdown;
 
-	DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
-	SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
-	                        snowflake_bind_data->schema_root.arrow_schema);
-	DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
+	// Populate bind_data->schema_root either from cache (no Snowflake roundtrip)
+	// or by issuing the SnowflakeGetArrowSchema call and seeding the cache.
+	if (cached_schema_root && cached_schema_root->arrow_schema.release) {
+		DPRINT("SnowflakeTableEntry: Reusing cached Arrow schema (no SF roundtrip)\n");
+		CloneCachedSchema(cached_schema_root->arrow_schema, snowflake_bind_data->schema_root.arrow_schema);
+	} else {
+		DPRINT("SnowflakeTableEntry: About to call SnowflakeGetArrowSchema\n");
+		SnowflakeGetArrowSchema(reinterpret_cast<ArrowArrayStream *>(snowflake_bind_data->factory.get()),
+		                        snowflake_bind_data->schema_root.arrow_schema);
+		DPRINT("SnowflakeTableEntry: SnowflakeGetArrowSchema completed\n");
+
+		// Seed the cache with a deep copy of the just-fetched schema so future
+		// binds on this table entry can skip the Snowflake roundtrip.
+		cached_schema_root = make_uniq<ArrowSchemaWrapper>();
+		CloneCachedSchema(snowflake_bind_data->schema_root.arrow_schema, cached_schema_root->arrow_schema);
+	}
 
 	// Use the new DuckDB API to populate the arrow table schema
 	vector<string> names;
