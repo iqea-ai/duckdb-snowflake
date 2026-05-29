@@ -15,9 +15,11 @@ namespace snowflake {
 
 //! Deep-copy a previously cached ArrowSchema into `dst`. Uses nanoarrow's
 //! ArrowSchemaDeepCopy so `dst` ends up with its own release-callback-owned
-//! memory, decoupled from the cached source.
-static void CloneCachedSchema(const ArrowSchema &src, ArrowSchema &dst) {
-	auto rc = duckdb_nanoarrow::ArrowSchemaDeepCopy(const_cast<ArrowSchema *>(&src), &dst);
+//! memory, decoupled from the cached source. `src` is taken by non-const ref
+//! because the nanoarrow C signature requires a mutable pointer even though
+//! the operation only reads from it.
+static void CloneCachedSchema(ArrowSchema &src, ArrowSchema &dst) {
+	auto rc = duckdb_nanoarrow::ArrowSchemaDeepCopy(&src, &dst);
 	if (rc != 0) {
 		throw IOException("Failed to deep-copy cached Snowflake Arrow schema (nanoarrow rc=%d)", rc);
 	}
