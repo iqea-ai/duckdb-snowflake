@@ -25,7 +25,7 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance);
 
 inline void SnowflakeVersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
 	result.SetVectorType(VectorType::CONSTANT_VECTOR);
-	auto val = Value("Snowflake Extension v0.1.0");
+	auto val = Value("Snowflake Extension v0.4.1");
 	result.SetValue(0, val);
 }
 
