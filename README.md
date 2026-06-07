@@ -1,6 +1,11 @@
 # DuckDB Snowflake Extension
 
-A powerful DuckDB extension that enables seamless querying of Snowflake databases using Arrow ADBC drivers. This extension provides efficient, columnar data transfer between DuckDB and Snowflake, making it ideal for analytics, ETL pipelines, and cross-database operations.
+[![Main Extension Distribution Pipeline](https://github.com/iqea-ai/duckdb-snowflake/actions/workflows/MainDistributionPipeline.yml/badge.svg?branch=main)](https://github.com/iqea-ai/duckdb-snowflake/actions/workflows/MainDistributionPipeline.yml)
+[![Test with Snowflake](https://github.com/iqea-ai/duckdb-snowflake/actions/workflows/test-with-snowflake.yml/badge.svg?branch=main)](https://github.com/iqea-ai/duckdb-snowflake/actions/workflows/test-with-snowflake.yml)
+[![Community Extension](https://img.shields.io/badge/community--extensions-snowflake-blue)](https://github.com/duckdb/community-extensions/blob/main/extensions/snowflake/description.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A DuckDB extension for querying Snowflake from DuckDB via the Apache Arrow ADBC Snowflake driver. Data flows between the two systems as Arrow record batches, so result sets stay columnar end-to-end.
 
 **This extension works with DuckDB v1.5.3.**
 
@@ -68,15 +73,15 @@ If you want to **install and use** the extension, continue reading this README f
 
 ## Overview
 
-The DuckDB Snowflake Extension bridges the gap between DuckDB's analytical capabilities and Snowflake's cloud data warehouse, allowing you to query Snowflake data directly from DuckDB without complex data movement processes.
+The extension exposes Snowflake to DuckDB as a remote data source. You can either pass SQL straight through to Snowflake with `snowflake_query()`, or `ATTACH` a Snowflake database and query it with DuckDB SQL.
 
-### Key Features
+### Capabilities
 
-- **Direct Querying**: Execute SQL queries against Snowflake from within DuckDB
-- **Arrow-Native Pipeline**: Leverages Apache Arrow for efficient, columnar data transfer
-- **Multiple Authentication Methods**: Support for password, OAuth, key-pair (with passphrase support), external browser SSO, Okta, and MFA authentication
-- **Secret Management**: Secure credential storage using DuckDB's secrets system
-- **Storage Extension**: Attach Snowflake databases as read-only storage
+- Run SQL against Snowflake from DuckDB, either as passthrough (`snowflake_query`) or against an attached Snowflake database
+- Arrow-native transport over the ADBC Snowflake driver
+- Authentication via password, OAuth, key pair (with passphrase), external browser SSO, Okta, and MFA
+- Credentials stored through DuckDB's secrets system
+- Read-only storage extension for `ATTACH`
 
 ## Installation
 
@@ -206,7 +211,7 @@ Test that the driver is found:
 ```sql
 LOAD snowflake;
 SELECT snowflake_version();
--- Should return: "Snowflake Extension v0.1.0"
+-- Should return: "Snowflake Extension v0.4.1"
 ```
 
 ## Configuration
@@ -299,7 +304,7 @@ Returns the extension version information.
 
 ```sql
 SELECT snowflake_version();
--- Returns: "Snowflake Extension v0.1.0"
+-- Returns: "Snowflake Extension v0.4.1"
 ```
 
 ### Table Functions
@@ -346,7 +351,7 @@ SELECT * FROM snow.public.customers LIMIT 10;
 ### Complex Analytics
 
 ```sql
--- Use Snowflake's computational power for complex analytics
+-- Run the analytics on the Snowflake side, then return the result set
 SELECT * FROM snowflake_query(
     '
     WITH monthly_sales AS (

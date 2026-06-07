@@ -151,7 +151,7 @@ CREATE SECRET test_snowflake (
 query I
 SELECT snowflake_version();
 ----
-Snowflake Extension v0.1.0
+Snowflake Extension v0.4.1
 ```
 
 ### Integration Testing
