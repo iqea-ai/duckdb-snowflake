@@ -1,0 +1,95 @@
+# name: test/sql/snowflake_settings.test
+# description: Session settings for ADBC driver read-ahead (issue #66)
+# group: [sql]
+
+require snowflake
+
+statement ok
+LOAD snowflake;
+
+# Both settings default to 0, meaning "leave the driver's own default alone".
+# This is what makes "defaults unchanged" structural rather than a claim: with 0
+# the extension never calls AdbcStatementSetOption at all.
+
+query II
+SELECT current_setting('snowflake_result_queue_size'), current_setting('snowflake_prefetch_concurrency');
+----
+0	0
+
+# Registered as extension options, so they are visible to duckdb_settings().
+
+query I
+SELECT count(*) FROM duckdb_settings() WHERE name IN ('snowflake_result_queue_size', 'snowflake_prefetch_concurrency');
+----
+2
+
+statement ok
+SET snowflake_result_queue_size = 1;
+
+statement ok
+SET snowflake_prefetch_concurrency = 2;
+
+query II
+SELECT current_setting('snowflake_result_queue_size'), current_setting('snowflake_prefetch_concurrency');
+----
+1	2
+
+# Session scope, so RESET restores the sentinel.
+
+statement ok
+RESET snowflake_result_queue_size;
+
+query I
+SELECT current_setting('snowflake_result_queue_size');
+----
+0
+
+# Bounds are enforced at SET time, so a bad value is reported where the mistake is
+# made. Below the range the driver errors opaquely mid-scan; above it, a large
+# result_queue_size crashes the process outright (Go "makechan: size out of range"
+# panic, or an OOM kill), because it becomes a channel capacity in the driver.
+
+statement error
+SET snowflake_result_queue_size = -1;
+----
+must be between 0 and 10000
+
+statement error
+SET snowflake_prefetch_concurrency = -5;
+----
+must be between 0 and 10000
+
+statement error
+SET snowflake_result_queue_size = 9223372036854775807;
+----
+must be between 0 and 10000
+
+statement error
+SET snowflake_prefetch_concurrency = 10000000000;
+----
+must be between 0 and 10000
+
+# The ceiling itself is accepted.
+
+statement ok
+SET snowflake_result_queue_size = 10000;
+
+statement ok
+RESET snowflake_result_queue_size;
+
+# Session scope, which issue #66 asks for explicitly: a session that materializes a
+# large result wants a small queue, an interactive session does not care. One
+# connection's SET must not be visible to another.
+
+statement ok con1
+SET SESSION snowflake_result_queue_size = 7;
+
+query I con1
+SELECT current_setting('snowflake_result_queue_size');
+----
+7
+
+query I con2
+SELECT current_setting('snowflake_result_queue_size');
+----
+0

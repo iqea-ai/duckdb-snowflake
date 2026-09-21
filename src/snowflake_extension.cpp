@@ -18,6 +18,7 @@
 #include "duckdb/common/vector_operations/ternary_executor.hpp"
 #include "snowflake_secret_provider.hpp"
 #include "snowflake_query_builder.hpp"
+#include "snowflake_settings.hpp"
 
 namespace duckdb {
 
@@ -48,6 +49,11 @@ inline void SnowflakeRenderPushdownQueryFun(DataChunk &args, ExpressionState &st
 static void LoadInternal(ExtensionLoader &loader) {
 	// Register the custom Snowflake secret type
 	RegisterSnowflakeSecretType(loader.GetDatabaseInstance());
+
+	// Register SET-able session settings. Deliberately outside the ADBC_AVAILABLE
+	// block below: the settings describe driver behavior, but they must exist (and
+	// be inspectable via duckdb_settings()) on every build.
+	snowflake::RegisterSnowflakeSettings(DBConfig::GetConfig(loader.GetDatabaseInstance()));
 
 	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
