@@ -32,12 +32,12 @@ static constexpr int64_t MAX_READ_AHEAD_VALUE = 10000;
 static void ValidateReadAheadValue(Value &parameter, const char *setting_name) {
 	if (parameter.IsNull()) {
 		throw InvalidInputException("%s must be between 0 and %lld (0 = use the driver default)", setting_name,
-		                            (long long)MAX_READ_AHEAD_VALUE);
+		                            MAX_READ_AHEAD_VALUE);
 	}
 	auto value = parameter.GetValue<int64_t>();
 	if (value < 0 || value > MAX_READ_AHEAD_VALUE) {
 		throw InvalidInputException("%s must be between 0 and %lld (0 = use the driver default), got %lld",
-		                            setting_name, (long long)MAX_READ_AHEAD_VALUE, (long long)value);
+		                            setting_name, MAX_READ_AHEAD_VALUE, value);
 	}
 }
 
