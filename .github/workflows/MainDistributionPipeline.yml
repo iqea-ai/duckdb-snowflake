@@ -286,8 +286,10 @@ jobs:
           & "$env:GITHUB_WORKSPACE\scripts\windows_live_query.ps1" -DuckDb "$env:GITHUB_WORKSPACE\cli\duckdb.exe" `
             -SqlFile "$env:RUNNER_TEMP\check2.sql" -Label check2-snowflake-query -Expect "42"
 
+      # always(): this is the control for check 2, so it must run even when
+      # check 2 fails. The job still fails on check 2.
       - name: Check 3, ATTACH then exit
-        if: env.SNOWFLAKE_LIVE == 'true'
+        if: always() && env.SNOWFLAKE_LIVE == 'true'
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\scripts\windows_live_query.ps1" -DuckDb "$env:GITHUB_WORKSPACE\cli\duckdb.exe" `

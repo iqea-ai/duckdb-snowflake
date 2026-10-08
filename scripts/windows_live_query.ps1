@@ -60,6 +60,22 @@ function Find-Gdb {
     return $null
 }
 
+# cdb reads the PDB-less MSVC binaries' export tables and resolves module!symbol
+# frames that gdb (a MinGW build) prints as ??. Present when the image's Windows
+# SDK includes the Debugging Tools; optional.
+function Find-Cdb {
+    $candidates = @(
+        "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe",
+        "C:\Program Files\Windows Kits\10\Debuggers\x64\cdb.exe"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) {
+            return $c
+        }
+    }
+    return $null
+}
+
 $tempDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
 $stdout = Join-Path $tempDir "$Label.stdout.txt"
 $stderr = Join-Path $tempDir "$Label.stderr.txt"
@@ -84,14 +100,39 @@ if (-not $exited) {
     $hungPid = $proc.Id
     Write-Host "HANG: $Label still running after $TimeoutSeconds s (pid $hungPid). Capturing threads."
     try {
+        # Commands go through a script file, not -ex: PowerShell split each
+        # multi-word -ex argument at its spaces on the way to gdb.exe, so the
+        # first run captured gdb's help text instead of backtraces.
         $gdb = Find-Gdb
         if ($gdb) {
+            $gdbScript = Join-Path $tempDir "$Label.gdb"
+            Set-Content -Path $gdbScript -Encoding ascii -Value @(
+                "set pagination off",
+                "set print thread-events on",
+                "info sharedlibrary",
+                "info threads",
+                "thread apply all bt"
+            )
             Write-Host "gdb: $gdb"
-            & $gdb -p $hungPid -batch -ex "set pagination off" -ex "info threads" -ex "thread apply all bt" 2>&1 |
-                Tee-Object -FilePath $dump
+            "===== gdb =====" | Out-File -FilePath $dump -Encoding utf8
+            & $gdb -p $hungPid -batch -x $gdbScript 2>&1 | Tee-Object -FilePath $dump -Append
         }
         else {
-            "gdb not found on this runner; no thread dump captured" | Tee-Object -FilePath $dump
+            "gdb not found on this runner" | Tee-Object -FilePath $dump -Append
+        }
+        $cdb = Find-Cdb
+        if ($cdb) {
+            Write-Host "cdb: $cdb"
+            "===== cdb =====" | Out-File -FilePath $dump -Encoding utf8 -Append
+            # Command file for the same reason as gdb. -pv attaches
+            # non-invasively, so it works after gdb has detached. lm = loaded
+            # modules, ~*k = every thread's stack, qd = detach and quit.
+            $cdbScript = Join-Path $tempDir "$Label.cdb"
+            Set-Content -Path $cdbScript -Encoding ascii -Value @("lm", "~*k", "qd")
+            & $cdb -pv -p $hungPid -cf $cdbScript 2>&1 | Tee-Object -FilePath $dump -Append
+        }
+        else {
+            "cdb not found on this runner" | Tee-Object -FilePath $dump -Append
         }
         Write-Host "-- stdout so far --"
         if (Test-Path $stdout) { Get-Content $stdout }
