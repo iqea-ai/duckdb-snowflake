@@ -1,0 +1,43 @@
+# name: test/sql/snowflake_function_metadata.test
+# description: Function metadata in duckdb_functions() (issue #67)
+# group: [sql]
+
+require snowflake
+
+statement ok
+LOAD snowflake;
+
+# Agents and tools discover an extension through duckdb_functions(). Before #67
+# every function reported placeholder parameter names (col0, col1, ...), a NULL
+# description and no examples. Needs no credentials and no driver, so it also
+# runs in the community-extensions registry build.
+
+query TTI
+SELECT function_name, parameters, len(examples)
+FROM duckdb_functions()
+WHERE function_name LIKE 'snowflake%'
+ORDER BY function_name;
+----
+snowflake_query	[query, profile]	1
+snowflake_render_pushdown_query	[table_name, projection_csv, filter_eq_column]	1
+snowflake_version	[]	1
+
+# Every function has a description and the snowflake category.
+
+query I
+SELECT count(*)
+FROM duckdb_functions()
+WHERE function_name LIKE 'snowflake%'
+  AND description IS NOT NULL
+  AND list_contains(categories, 'snowflake');
+----
+3
+
+# Table-function examples must be full statements, not bare calls.
+
+query I
+SELECT examples[1] LIKE 'SELECT * FROM snowflake_query(%'
+FROM duckdb_functions()
+WHERE function_name = 'snowflake_query';
+----
+true

@@ -44,6 +44,33 @@ inline void SnowflakeRenderPushdownQueryFun(DataChunk &args, ExpressionState &st
 	    });
 }
 
+//! Builds the duckdb_functions() metadata for one of our functions (issue #67).
+//! The bare RegisterFunction(ScalarFunction/TableFunction) overloads have nowhere
+//! to put this, so each function is registered through its CreateXFunctionInfo
+//! instead. `examples` follow DuckDB's convention: a bare expression for a scalar,
+//! a full statement for a table function (a bare table-function call is a binder
+//! error).
+static FunctionDescription SnowflakeFunctionDescription(vector<string> parameter_names, string description,
+                                                        string example) {
+	FunctionDescription desc;
+	desc.parameter_names = std::move(parameter_names);
+	desc.description = std::move(description);
+	desc.examples = {std::move(example)};
+	desc.categories = {"snowflake"};
+	return desc;
+}
+
+//! Registers through the info form. ALTER_ON_CONFLICT is what the bare overloads
+//! set internally (extension_loader.cpp); the CreateInfo default is
+//! ERROR_ON_CONFLICT, so leaving it out would change behavior on re-load.
+template <class INFO, class FUNCTION>
+static void RegisterWithDescription(ExtensionLoader &loader, FUNCTION function, FunctionDescription desc) {
+	INFO info(std::move(function));
+	info.descriptions.push_back(std::move(desc));
+	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
+	loader.RegisterFunction(std::move(info));
+}
+
 // Compatibility layer for different DuckDB versions
 static void LoadInternal(ExtensionLoader &loader) {
 	// Register the custom Snowflake secret type
@@ -52,20 +79,35 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
 	    ScalarFunction("snowflake_version", {}, LogicalType::VARCHAR, SnowflakeVersionScalarFun);
-	loader.RegisterFunction(std::move(snowflake_version_function));
+	RegisterWithDescription<CreateScalarFunctionInfo>(
+	    loader, std::move(snowflake_version_function),
+	    SnowflakeFunctionDescription({}, "Returns the version string of the Snowflake extension.",
+	                                 "snowflake_version()"));
 
 	// Test-only: render the SQL that pushdown would emit for a given table +
 	// projection + (optional) single equality filter. Used by query_builder.test.
 	auto snowflake_render_pushdown_query_function = ScalarFunction(
 	    "snowflake_render_pushdown_query", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	    LogicalType::VARCHAR, SnowflakeRenderPushdownQueryFun);
-	loader.RegisterFunction(std::move(snowflake_render_pushdown_query_function));
+	RegisterWithDescription<CreateScalarFunctionInfo>(
+	    loader, std::move(snowflake_render_pushdown_query_function),
+	    SnowflakeFunctionDescription(
+	        {"table_name", "projection_csv", "filter_eq_column"},
+	        "Test helper: returns the SQL the pushdown planner would send to Snowflake for a table, a "
+	        "comma-separated projection list and an optional single equality-filter column. Runs no query.",
+	        "snowflake_render_pushdown_query('DB.SCHEMA.ORDERS', 'C_CUSTKEY,C_MKTSEGMENT', '')"));
 
 #ifdef ADBC_AVAILABLE
 	// Register snowflake_scan table function (only available when ADBC is
 	// available)
 	auto snowflake_scan_function = GetSnowflakeScanFunction();
-	loader.RegisterFunction(std::move(snowflake_scan_function));
+	RegisterWithDescription<CreateTableFunctionInfo>(
+	    loader, std::move(snowflake_scan_function),
+	    SnowflakeFunctionDescription(
+	        {"query", "profile"},
+	        "Runs a SQL statement on Snowflake exactly as written and returns its result as a table. "
+	        "profile is the name of a Snowflake secret created with CREATE SECRET (TYPE snowflake).",
+	        "SELECT * FROM snowflake_query('SELECT 1', 'my_snowflake_secret');"));
 
 	// Register storage extension (only available when ADBC is available)
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
