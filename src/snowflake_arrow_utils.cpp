@@ -111,6 +111,11 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 			throw IOException("Failed to create statement");
 		}
 		factory->statement_initialized = true;
+
+		// This is the statement that streams the result set, so it is the one that
+		// matters for memory: without a bound here the driver reads the whole result
+		// ahead of a slow consumer (issue #66).
+		snowflake::ApplyDriverSettings(factory->driver_settings, &factory->statement);
 	}
 
 	// Always set the SQL query before execution to ensure we use the modified
@@ -181,57 +186,6 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	return std::move(wrapper);
 }
 
-// This function is called by DuckDB's arrow_scan during bind to get the schema
-// It allows DuckDB to know the column types before actually executing the query
-void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema) {
-	auto factory = reinterpret_cast<SnowflakeArrowStreamFactory *>(factory_ptr);
-
-	// Initialize statement if not already done
-	if (!factory->statement_initialized) {
-		AdbcError error;
-		std::memset(&error, 0, sizeof(error));
-
-		AdbcStatusCode status = AdbcStatementNew(factory->lease->GetConnection(), &factory->statement, &error);
-		DPRINT("Statement created at %p for factory %p\n", (void *)&factory->statement, (void *)factory);
-		if (status != ADBC_STATUS_OK) {
-			throw IOException("Failed to create statement");
-		}
-		factory->statement_initialized = true;
-
-		// Set the query (use modified_query which includes pushdown)
-		status = AdbcStatementSetSqlQuery(&factory->statement, factory->modified_query.c_str(), &error);
-		if (status != ADBC_STATUS_OK) {
-			std::string error_msg = "Failed to set query: ";
-			if (error.message) {
-				error_msg += error.message;
-				if (error.release) {
-					error.release(&error);
-				}
-			}
-			throw IOException(error_msg);
-		}
-	}
-
-	// Execute with schema only - this is a lightweight operation that just
-	// returns the schema without actually executing the full query
-	AdbcError schema_error;
-	std::memset(&schema_error, 0, sizeof(schema_error));
-	std::memset(&schema, 0, sizeof(schema));
-
-	AdbcStatusCode schema_status = AdbcStatementExecuteSchema(&factory->statement, &schema, &schema_error);
-	DPRINT("ExecuteSchema completed for statement %p\n", (void *)&factory->statement);
-	if (schema_status != ADBC_STATUS_OK) {
-		std::string error_msg = "Failed to get schema: ";
-		if (schema_error.message) {
-			error_msg += schema_error.message;
-			if (schema_error.release) {
-				schema_error.release(&schema_error);
-			}
-		}
-		throw IOException(error_msg);
-	}
-}
-
 void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema) {
 	// Fetch the bind schema by executing the query with a 1-row limit and reading
 	// the schema off the executed stream, instead of AdbcStatementExecuteSchema.
@@ -253,6 +207,16 @@ void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, Arrow
 	AdbcStatusCode status = AdbcStatementNew(factory->lease->GetConnection(), &probe_stmt, &error);
 	if (status != ADBC_STATUS_OK) {
 		throw IOException("Failed to create statement for schema probe");
+	}
+	// LIMIT 1, so this cannot buffer anything meaningful; applied for consistency so
+	// every statement on the lease runs under the same driver configuration. Released
+	// on failure like every other throw below: the connection returns to the pool, so
+	// a leaked statement handle would outlive this scan.
+	try {
+		snowflake::ApplyDriverSettings(factory->driver_settings, &probe_stmt);
+	} catch (...) {
+		AdbcStatementRelease(&probe_stmt, nullptr);
+		throw;
 	}
 
 	status = AdbcStatementSetSqlQuery(&probe_stmt, probe_query.c_str(), &error);
@@ -318,6 +282,10 @@ void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowS
 	}
 	factory->statement_initialized = true;
 
+	// Safe to throw past this point: the factory owns the statement now and releases
+	// it in its destructor.
+	snowflake::ApplyDriverSettings(factory->driver_settings, &factory->statement);
+
 	status = AdbcStatementSetSqlQuery(&factory->statement, factory->modified_query.c_str(), &error);
 	if (status != ADBC_STATUS_OK) {
 		std::string msg = "Failed to set query: ";
@@ -379,6 +347,12 @@ static void ExecuteOnLease(SnowflakeArrowStreamFactory *factory, const std::stri
 	std::memset(&stmt, 0, sizeof(stmt));
 	if (AdbcStatementNew(factory->lease->GetConnection(), &stmt, &error) != ADBC_STATUS_OK) {
 		throw IOException(std::string("Failed to create statement for ") + what);
+	}
+	try {
+		snowflake::ApplyDriverSettings(factory->driver_settings, &stmt);
+	} catch (...) {
+		AdbcStatementRelease(&stmt, nullptr);
+		throw;
 	}
 	if (AdbcStatementSetSqlQuery(&stmt, sql.c_str(), &error) != ADBC_STATUS_OK) {
 		std::string msg = std::string("Failed to set query for ") + what + ": ";

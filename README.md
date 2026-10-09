@@ -293,6 +293,59 @@ CREATE SECRET ...
 DROP SECRET my_snowflake_secret;
 ```
 
+### Extension Settings
+
+Two session settings control how far ahead the ADBC Snowflake driver reads while
+DuckDB consumes a result. Both default to `0`, meaning "leave the driver's own
+default in place", so a session that does not set them behaves exactly as before.
+
+| Setting | Driver option | Default |
+|---|---|---|
+| `snowflake_result_queue_size` | `adbc.rpc.result_queue_size` | `0` (driver default: 100) |
+| `snowflake_prefetch_concurrency` | `adbc.snowflake.rpc.prefetch_concurrency` | `0` (driver default: 5) |
+
+Both accept `0`-`10000`. The ceiling is a safety limit, not a style choice: a very
+large `snowflake_result_queue_size` becomes an oversized channel inside the driver
+and kills the process rather than returning an error.
+
+**When you need this.** The driver buffers decoded Arrow batches ahead of the
+consumer, in memory it allocates itself. Because the handoff to DuckDB is
+zero-copy, that memory never passes through DuckDB's buffer manager, so
+`memory_limit` neither sees nor bounds it. Whenever DuckDB consumes more slowly
+than the network delivers — `CREATE TABLE ... AS`, `COPY ... TO` a compressed
+file, an insert into another catalog — the driver can read far ahead of the
+writer and accumulate a large part of the result in memory.
+
+Lowering the queue size makes the driver's reader block sooner, which throttles it
+to the speed of the consumer:
+
+```sql
+SET snowflake_result_queue_size = 1;
+
+COPY (SELECT * FROM snowflake_query('SELECT * FROM big_table', 'sf'))
+  TO 'out.parquet' (FORMAT parquet, COMPRESSION zstd, COMPRESSION_LEVEL 19);
+```
+
+`snowflake_prefetch_concurrency` controls how many result chunks download in
+parallel. Lowering it reduces read-ahead further but costs download throughput,
+so prefer tuning the queue size first.
+
+The settings are session-scoped and apply to both `snowflake_query()` and scans
+over an attached Snowflake catalog. To confirm they were applied:
+
+```sql
+SET enable_logging = true;
+SET logging_level = 'debug';
+-- run your query, then:
+SELECT message FROM duckdb_logs WHERE message LIKE '%ADBC read-ahead%';
+```
+
+> **This is a mitigation, not a hard bound.** A small queue size throttles the
+> driver because a Snowflake result chunk normally decodes into more than one
+> Arrow batch, so the reader blocks. A chunk that yields exactly one batch does
+> not block, and read-ahead is unbounded again. The underlying driver issue is
+> [adbc-drivers/snowflake#197](https://github.com/adbc-drivers/snowflake/issues/197).
+
 ## Functions Reference
 
 ### Scalar Functions

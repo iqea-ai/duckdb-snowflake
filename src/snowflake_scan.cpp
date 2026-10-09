@@ -9,7 +9,9 @@
 #include "snowflake_arrow_utils.hpp"
 #include "snowflake_config.hpp"
 #include "snowflake_secrets.hpp"
+#include "snowflake_settings.hpp"
 #include "snowflake_debug.hpp"
+#include "duckdb/logging/logger.hpp"
 
 namespace duckdb {
 namespace snowflake {
@@ -81,6 +83,15 @@ static unique_ptr<FunctionData> SnowflakeScanBind(ClientContext &context, TableF
 	// Create the factory that will manage the ADBC connection and statement.
 	// The factory owns the leased connection for the whole scan operation.
 	auto factory = make_uniq<SnowflakeArrowStreamFactory>(std::move(lease), query);
+
+	// Snapshot the driver read-ahead settings here, while we still have a
+	// ClientContext. The scan production path runs as a bare function pointer from
+	// DuckDB's arrow scanner and gets no context, so this is the last place they can
+	// be read (issue #66).
+	factory->driver_settings = GetDriverSettings(context);
+	if (factory->driver_settings.AnySet()) {
+		DUCKDB_LOG_DEBUG(context, "snowflake_query: ADBC read-ahead %s", factory->driver_settings.ToLogString());
+	}
 
 	// Create the bind data that inherits from ArrowScanFunctionData
 	// This allows us to use DuckDB's native Arrow scan implementation
