@@ -46,6 +46,7 @@ set(EXTENSION_SOURCES
     src/snowflake_secrets.cpp
     src/snowflake_secret_provider.cpp
     src/snowflake_scan.cpp
+    src/snowflake_settings.cpp
     src/snowflake_client.cpp
     src/snowflake_client_manager.cpp
     src/snowflake_config.cpp

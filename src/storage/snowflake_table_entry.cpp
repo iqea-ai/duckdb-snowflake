@@ -4,6 +4,8 @@
 #include "snowflake_client_manager.hpp"
 #include "snowflake_scan.hpp"
 #include "snowflake_arrow_utils.hpp"
+#include "snowflake_settings.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "snowflake_query_builder.hpp"
 #include "duckdb/common/arrow/nanoarrow/nanoarrow.h"
 #include "duckdb/storage/table_storage_info.hpp"
@@ -42,6 +44,13 @@ TableFunction SnowflakeTableEntry::GetScanFunction(ClientContext &context, uniqu
 
 	auto factory = make_uniq<SnowflakeArrowStreamFactory>(std::move(lease), query);
 	DPRINT("SnowflakeTableEntry: Created factory at %p\n", (void *)factory.get());
+
+	// Same snapshot as the snowflake_query() bind: an attached-catalog scan streams
+	// its result through the same factory and has the same unbounded read-ahead.
+	factory->driver_settings = GetDriverSettings(context);
+	if (factory->driver_settings.AnySet()) {
+		DUCKDB_LOG_DEBUG(context, "snowflake ATTACH scan: ADBC read-ahead %s", factory->driver_settings.ToLogString());
+	}
 
 	// Apply pushdown settings from catalog options
 	auto &snowflake_catalog = catalog.Cast<SnowflakeCatalog>();

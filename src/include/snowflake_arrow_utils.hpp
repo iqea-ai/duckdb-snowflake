@@ -8,6 +8,7 @@
 
 #include <utility>
 #include "snowflake_client_manager.hpp"
+#include "snowflake_settings.hpp"
 
 namespace duckdb {
 
@@ -43,6 +44,14 @@ struct SnowflakeArrowStreamFactory {
 	// arbitrary user SQL, so projection is applied by wrapping it as a subquery
 	// (SELECT <cols> FROM (<query>)) rather than by parsing a table name out of it.
 	bool wrap_as_subquery = false;
+
+	// ADBC driver read-ahead knobs, snapshotted from the session at bind time.
+	// These CANNOT be read where the statement is created: SnowflakeProduceArrowScan
+	// is handed to DuckDB's arrow scanner as a plain function pointer (see
+	// SnowflakeScanBindData), so DuckDB fixes its signature and passes no
+	// ClientContext — there is nothing there to call TryGetCurrentSetting on.
+	// Bind has the context, so the values are captured there and carried here.
+	snowflake::SnowflakeDriverSettings driver_settings;
 
 	// Pushdown parameters (set by DuckDB via UpdatePushdownParameters)
 	vector<string> projection_columns;
@@ -90,14 +99,6 @@ struct SnowflakeArrowStreamFactory {
 //   pushdown)
 // Returns: An ArrowArrayStreamWrapper that provides Arrow data chunks
 unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr, ArrowStreamParameters &parameters);
-
-// Function to get the schema from the factory
-// This is called by DuckDB's arrow_scan during bind to determine column types
-// Parameters:
-//   factory_ptr: Pointer to our SnowflakeArrowStreamFactory cast to
-//   ArrowArrayStream* schema: Output parameter that will be filled with the
-//   Arrow schema
-void SnowflakeGetArrowSchema(ArrowArrayStream *factory_ptr, ArrowSchema &schema);
 
 // Fetch the Arrow schema by executing the query with a 1-row limit (data-path
 // schema) instead of AdbcStatementExecuteSchema. Required so geoarrow.wkb column

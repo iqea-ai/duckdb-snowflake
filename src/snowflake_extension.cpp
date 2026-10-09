@@ -19,6 +19,7 @@
 #include "snowflake_secret_provider.hpp"
 #include "snowflake_query_builder.hpp"
 #include "snowflake_client_manager.hpp"
+#include "snowflake_settings.hpp"
 
 namespace duckdb {
 
@@ -55,6 +56,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// object cache, and re-loading into the same database just replaces it.
 	loader.GetDatabaseInstance().GetObjectCache().Put(snowflake::SnowflakePoolCloseGuard::ObjectType(),
 	                                                  make_shared_ptr<snowflake::SnowflakePoolCloseGuard>());
+
+	// Register SET-able session settings. Deliberately outside the ADBC_AVAILABLE
+	// block below: the settings describe driver behavior, but they must exist (and
+	// be inspectable via duckdb_settings()) on every build.
+	snowflake::RegisterSnowflakeSettings(DBConfig::GetConfig(loader.GetDatabaseInstance()));
 
 	// Register snowflake_version function using DuckDB 1.4 API
 	auto snowflake_version_function =
