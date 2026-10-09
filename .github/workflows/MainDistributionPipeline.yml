@@ -271,7 +271,7 @@ jobs:
           fi
           SECRET="CREATE SECRET sf (TYPE snowflake, ACCOUNT '$SNOWFLAKE_ACCOUNT', USER '$SNOWFLAKE_KEYPAIR_USER', AUTH_TYPE 'key_pair', PRIVATE_KEY_FILE '$SNOWFLAKE_PRIVATE_KEY_FILE', PRIVATE_KEY_PASSWORD '$SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE', DATABASE '$SNOWFLAKE_DATABASE', WAREHOUSE 'COMPUTE_WH');"
           printf "LOAD '%s';\n%s\nSELECT * FROM snowflake_query('SELECT 42 AS answer', 'sf');\n" "$EXT" "$SECRET" > "$TMP_M/check2.sql"
-          printf "LOAD '%s';\n%s\nATTACH '' AS sf_db (TYPE snowflake, SECRET sf, READ_ONLY);\nSELECT count(*) FROM sf_db.tpch_sf1.nation;\n" "$EXT" "$SECRET" > "$TMP_M/check3.sql"
+          printf "LOAD '%s';\n%s\nATTACH '' AS sf_db (TYPE snowflake, SECRET sf, READ_ONLY);\nSELECT count(n_nationkey) FROM sf_db.tpch_sf1.nation;\n" "$EXT" "$SECRET" > "$TMP_M/check3.sql"
 
       - name: Check 1, load and snowflake_version()
         shell: pwsh
