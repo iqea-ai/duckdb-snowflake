@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  DUCKDB_CLI_VERSION: v1.5.5
+  DUCKDB_CLI_VERSION: v1.5.6
 
 jobs:
   unix-installer:

@@ -1,7 +1,7 @@
 name: Test with Snowflake
 on:
   push:
-    branches: [main, stable]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -23,7 +23,7 @@ jobs:
       - name: Setup DuckDB version
         run: |
           cd duckdb
-          git checkout v1.5.5 || git checkout main
+          git checkout v1.5.6 || git checkout main
       
       - name: Install dependencies
         run: |
