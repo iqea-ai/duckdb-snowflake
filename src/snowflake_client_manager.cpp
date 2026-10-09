@@ -17,8 +17,17 @@ void ConnectionLease::Reset() {
 }
 
 SnowflakeClientManager &SnowflakeClientManager::GetInstance() {
-	static SnowflakeClientManager instance;
-	return instance;
+	// Allocated once and deliberately never destroyed (issue #69). A
+	// function-local static object would be destroyed when the extension DLL is
+	// torn down at process exit, and its idle SnowflakeClients would call
+	// AdbcConnectionRelease into the Go driver from there. On Windows that runs
+	// after ExitProcess has terminated every other thread, including the Go
+	// runtime's, so the call never returns and the process hangs. Idle
+	// connections are drained earlier, at database close, by
+	// SnowflakePoolCloseGuard; anything still pooled at exit is abandoned to the
+	// OS, the same as a process that is killed.
+	static auto *instance = new SnowflakeClientManager();
+	return *instance;
 }
 
 ConnectionLease SnowflakeClientManager::Acquire(const SnowflakeConfig &config) {
@@ -80,6 +89,19 @@ void SnowflakeClientManager::DrainIdle(const SnowflakeConfig &config) {
 		}
 	}
 	// Destroy (disconnect) the drained connections outside the lock.
+}
+
+void SnowflakeClientManager::DrainAll() {
+	decltype(idle_connections) to_close;
+	{
+		std::lock_guard<std::mutex> lock(pool_mutex);
+		to_close.swap(idle_connections);
+	}
+	// Destroy (disconnect) the drained connections outside the lock.
+}
+
+SnowflakePoolCloseGuard::~SnowflakePoolCloseGuard() {
+	SnowflakeClientManager::GetInstance().DrainAll();
 }
 
 } // namespace snowflake

@@ -18,6 +18,7 @@
 #include "duckdb/common/vector_operations/ternary_executor.hpp"
 #include "snowflake_secret_provider.hpp"
 #include "snowflake_query_builder.hpp"
+#include "snowflake_client_manager.hpp"
 #include "snowflake_settings.hpp"
 
 namespace duckdb {
@@ -49,6 +50,12 @@ inline void SnowflakeRenderPushdownQueryFun(DataChunk &args, ExpressionState &st
 static void LoadInternal(ExtensionLoader &loader) {
 	// Register the custom Snowflake secret type
 	RegisterSnowflakeSecretType(loader.GetDatabaseInstance());
+
+	// Drain pooled ADBC connections when this database closes, not at process
+	// exit (issue #69). Keyed per database: each DatabaseInstance has its own
+	// object cache, and re-loading into the same database just replaces it.
+	loader.GetDatabaseInstance().GetObjectCache().Put(snowflake::SnowflakePoolCloseGuard::ObjectType(),
+	                                                  make_shared_ptr<snowflake::SnowflakePoolCloseGuard>());
 
 	// Register SET-able session settings. Deliberately outside the ADBC_AVAILABLE
 	// block below: the settings describe driver behavior, but they must exist (and

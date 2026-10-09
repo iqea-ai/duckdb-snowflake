@@ -2,6 +2,7 @@
 
 #include "snowflake_client.hpp"
 #include "snowflake_config.hpp"
+#include "duckdb/storage/object_cache.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -97,6 +98,11 @@ public:
 	//! released, at which point they are dropped rather than pooled if stale.
 	void DrainIdle(const SnowflakeConfig &config);
 
+	//! Close and forget every idle connection, for every config. Called when a
+	//! DuckDB database closes (see SnowflakePoolCloseGuard), so pooled ADBC
+	//! handles are released while the process is still fully alive (issue #69).
+	void DrainAll();
+
 private:
 	friend class ConnectionLease;
 	SnowflakeClientManager() = default;
@@ -109,6 +115,28 @@ private:
 
 	std::unordered_map<SnowflakeConfig, std::vector<shared_ptr<SnowflakeClient>>, SnowflakeConfigHash> idle_connections;
 	std::mutex pool_mutex;
+};
+
+//! Drains the connection pool when the DuckDB database that loaded the
+//! extension closes. Registered as a non-evictable ObjectCache entry, which
+//! ~DatabaseInstance destroys after its catalogs and client connections, so every
+//! scan has already returned its lease (issue #69). Without this, the idle
+//! connections a snowflake_query() leaves behind would only be released at
+//! process exit, and on Windows that call into the Go driver never returns.
+class SnowflakePoolCloseGuard : public ObjectCacheEntry {
+public:
+	~SnowflakePoolCloseGuard() override;
+
+	static string ObjectType() {
+		return "snowflake_connection_pool_guard";
+	}
+	string GetObjectType() override {
+		return ObjectType();
+	}
+	//! Invalid index = never evicted; it must live exactly as long as the database.
+	optional_idx GetEstimatedCacheMemory() const override {
+		return optional_idx();
+	}
 };
 
 } // namespace snowflake
