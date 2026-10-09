@@ -1,0 +1,72 @@
+# name: test/sql/snowflake_attach_count_star.test
+# description: Queries that reference no columns of an attached table (issue #73)
+# group: [sql]
+
+require snowflake
+
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PRIVATE_KEY_FILE
+
+require-env SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE
+
+require-env SNOWFLAKE_DATABASE
+
+statement ok
+CREATE SECRET sf_count_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
+    DATABASE '${SNOWFLAKE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+# A query that references no columns still has to scan one. DuckDB used to pick
+# the rowid virtual column that the table entry advertised, which a Snowflake
+# table does not have: with pushdown off the planner rejected it, with pushdown
+# on the rendered Snowflake SQL had an empty SELECT list. Both modes are covered.
+
+statement ok
+ATTACH '' AS sf_nopd (TYPE SNOWFLAKE, SECRET sf_count_secret, READ_ONLY);
+
+statement ok
+ATTACH '' AS sf_pd (TYPE SNOWFLAKE, SECRET sf_count_secret, READ_ONLY, enable_pushdown true);
+
+query I
+SELECT count(*) FROM sf_nopd.tpch_sf1.nation;
+----
+25
+
+query I
+SELECT count(*) FROM sf_pd.tpch_sf1.nation;
+----
+25
+
+query I
+SELECT count(*) FROM sf_nopd.tpch_sf1.region, sf_nopd.tpch_sf1.nation;
+----
+125
+
+query I
+SELECT count(*) FROM (SELECT 1 FROM sf_pd.tpch_sf1.region);
+----
+5
+
+# A filter still works alongside count(*).
+
+query I
+SELECT count(*) FROM sf_pd.tpch_sf1.nation WHERE n_regionkey = 1;
+----
+5
+
+# There is no rowid on a Snowflake table, so asking for one is a binder error.
+
+statement error
+SELECT rowid FROM sf_nopd.tpch_sf1.region;
+----
+rowid
