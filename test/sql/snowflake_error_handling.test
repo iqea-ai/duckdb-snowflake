@@ -217,13 +217,13 @@ inf
 statement error
 SELECT CAST('invalid_number' AS INTEGER) FROM sf_db.tpch_sf1.customer LIMIT 1;
 ----
-Not implemented Error: Virtual columns require projection pushdown
+Conversion Error: Could not convert string 'invalid_number' to INT32
 
 # Test 22: Test invalid date casting (should fail)
 statement error
 SELECT CAST('invalid_date' AS DATE) FROM sf_db.tpch_sf1.customer LIMIT 1;
 ----
-Not implemented Error: Virtual columns require projection pushdown
+Conversion Error: invalid date field format: "invalid_date"
 
 # Test 23: Test NULL operations (should work)
 query I

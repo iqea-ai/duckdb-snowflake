@@ -125,6 +125,10 @@ unique_ptr<BaseStatistics> SnowflakeTableEntry::GetStatistics(ClientContext &con
 	throw NotImplementedException("Snowflake does not support getting statistics for tables");
 }
 
+virtual_column_map_t SnowflakeTableEntry::GetVirtualColumns() const {
+	return virtual_column_map_t();
+}
+
 TableStorageInfo SnowflakeTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
 	// Don't fetch row count to avoid ADBC statement conflicts

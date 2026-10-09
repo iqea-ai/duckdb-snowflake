@@ -61,6 +61,14 @@ public:
 
 	TableStorageInfo GetStorageInfo(ClientContext &context) override;
 
+	//! Snowflake tables have no rowid, and the Arrow scan cannot produce one.
+	//! The inherited default advertises a rowid virtual column, which DuckDB then
+	//! picks for queries that reference no columns (count(*), SELECT 1 FROM t):
+	//! with pushdown off the planner rejects it, with pushdown on it renders an
+	//! empty SELECT list (issue #73). Advertising none makes DuckDB fall back to
+	//! column 0, a real column the scan always produces.
+	virtual_column_map_t GetVirtualColumns() const override;
+
 private:
 	SnowflakeConfig config;
 	//! Serializes access to the schema cache and the lazy columns load below.
