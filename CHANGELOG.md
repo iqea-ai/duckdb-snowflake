@@ -9,6 +9,26 @@ The version recorded here is the **extension version** (what `snowflake_version(
 returns and what the [community-extensions descriptor](https://github.com/duckdb/community-extensions/blob/main/extensions/snowflake/description.yml)
 pins). The DuckDB version each release targets is noted separately.
 
+## [0.6.0] - 2026-10-09
+
+Targets DuckDB **v1.5.6**.
+
+### Added
+- `SET snowflake_result_queue_size` and `SET snowflake_prefetch_concurrency` bound the ADBC driver's read-ahead. A slow consumer (`CREATE TABLE AS`, `COPY TO`, inserts) no longer lets the driver buffer most of the result outside `memory_limit`. Defaults are unchanged: with neither set, no option reaches the driver ([#66](https://github.com/iqea-ai/duckdb-snowflake/issues/66), reported by housejester, in [#68](https://github.com/iqea-ai/duckdb-snowflake/pull/68))
+- `duckdb_functions()` now reports real parameter names, a description, an example and a category for `snowflake_query`, `snowflake_version` and `snowflake_render_pushdown_query`, instead of `col0`/`col1` and NULL ([#67](https://github.com/iqea-ai/duckdb-snowflake/issues/67), reported by rustyconover, in [#72](https://github.com/iqea-ai/duckdb-snowflake/pull/72))
+- CI runs live queries on Windows: the shipped `windows_amd64` package goes through the stock CLI with a hard timeout, and a hang uploads a thread dump ([#70](https://github.com/iqea-ai/duckdb-snowflake/issues/70), in [#71](https://github.com/iqea-ai/duckdb-snowflake/pull/71))
+
+### Fixed
+- On Windows the CLI no longer hangs on exit after `snowflake_query()`. Pooled connections were released by static destructors at process exit, where the Go driver blocks forever because Windows has already terminated its threads. Connections are now released when the database closes, and nothing calls into the driver during process teardown ([#69](https://github.com/iqea-ai/duckdb-snowflake/issues/69), in [#71](https://github.com/iqea-ai/duckdb-snowflake/pull/71))
+- `count(*)`, `SELECT 1 FROM t` and other queries that reference no columns of an attached table no longer fail. With pushdown off they raised `Virtual columns require projection pushdown`; with pushdown on they sent an empty `SELECT` list to Snowflake ([#73](https://github.com/iqea-ai/duckdb-snowflake/issues/73), in [#74](https://github.com/iqea-ai/duckdb-snowflake/pull/74))
+
+### Changed
+- Update DuckDB submodule and CI pins to v1.5.6, the community-extensions registry's current build target
+- CI no longer triggers on the retired `stable` branch
+
+### Notes
+- Users on DuckDB v1.5.5 stay on 0.5.2: the registry freezes each DuckDB version's extension build, so these fixes reach DuckDB v1.5.6 and later.
+
 ## [0.5.2] - 2026-08-07
 
 Targets DuckDB **v1.5.5**.
@@ -84,6 +104,7 @@ Earlier releases predate this CHANGELOG. The version-to-release mapping below wa
 - **0.3.0** (registry 2026-03-14, DuckDB v1.5.0) — DuckDB v1.5 compatibility update ([#23](https://github.com/iqea-ai/duckdb-snowflake/pull/23), ref `a2a3aed`)
 - The `snowflake_query` column-pruning crash fix ([#25](https://github.com/iqea-ai/duckdb-snowflake/pull/25), merged 2026-03-20) first shipped with 0.4.0 — the registry descriptor was not bumped for it separately.
 
+[0.6.0]: https://github.com/iqea-ai/duckdb-snowflake/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/iqea-ai/duckdb-snowflake/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/iqea-ai/duckdb-snowflake/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/iqea-ai/duckdb-snowflake/compare/v0.4.1...v0.5.0

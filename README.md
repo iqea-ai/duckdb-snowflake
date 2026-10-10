@@ -7,13 +7,13 @@
 
 A DuckDB extension for querying Snowflake from DuckDB via the Apache Arrow ADBC Snowflake driver. Data flows between the two systems as Arrow record batches, so result sets stay columnar end-to-end.
 
-**This extension works with DuckDB v1.5.5.**
+**This extension works with DuckDB v1.5.6.**
 
 ## Quick Start
 
-### Get the Latest Extension Build (v1.5.5)
+### Get the Latest Extension Build (v1.5.6)
 
-Install DuckDB 1.5.5 (or newer) and then install the Snowflake extension directly from the community repository:
+Install DuckDB 1.5.6 (or newer) and then install the Snowflake extension directly from the community repository:
 
 ```sql
 INSTALL snowflake FROM community;
@@ -167,9 +167,9 @@ curl -L -O https://github.com/adbc-drivers/snowflake/releases/download/go/v1.11.
 # 2. Extract the driver library (libadbc_driver_snowflake.so on Linux, .dylib on macOS)
 tar xzf <ASSET>
 
-# 3. Move to DuckDB extensions directory under the fixed name (DuckDB v1.5.5)
-mkdir -p ~/.duckdb/extensions/v1.5.5/<PLATFORM>
-mv libadbc_driver_snowflake.* ~/.duckdb/extensions/v1.5.5/<PLATFORM>/libadbc_driver_snowflake.so
+# 3. Move to DuckDB extensions directory under the fixed name (DuckDB v1.5.6)
+mkdir -p ~/.duckdb/extensions/v1.5.6/<PLATFORM>
+mv libadbc_driver_snowflake.* ~/.duckdb/extensions/v1.5.6/<PLATFORM>/libadbc_driver_snowflake.so
 
 # 4. Clean up
 rm <ASSET>
@@ -184,9 +184,9 @@ curl -L -O https://github.com/adbc-drivers/snowflake/releases/download/go/v1.11.
 # Extract
 tar xzf snowflake_linux_amd64_v1.11.0.tar.gz
 
-# Install (DuckDB v1.5.5)
-mkdir -p ~/.duckdb/extensions/v1.5.5/linux_amd64
-mv libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.5.5/linux_amd64/
+# Install (DuckDB v1.5.6)
+mkdir -p ~/.duckdb/extensions/v1.5.6/linux_amd64
+mv libadbc_driver_snowflake.so ~/.duckdb/extensions/v1.5.6/linux_amd64/
 
 # Clean up
 rm snowflake_linux_amd64_v1.11.0.tar.gz
@@ -199,9 +199,9 @@ curl -L -O https://github.com/adbc-drivers/snowflake/releases/download/go/v1.11.
 tar -xzf snowflake_windows_amd64_v1.11.0.tar.gz
 del snowflake_windows_amd64_v1.11.0.tar.gz
 
-# Place in DuckDB extensions directory under the fixed name (DuckDB v1.5.5)
-mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.5.5\windows_amd64
-move libadbc_driver_snowflake.dll C:\Users\%USERNAME%\.duckdb\extensions\v1.5.5\windows_amd64\libadbc_driver_snowflake.so
+# Place in DuckDB extensions directory under the fixed name (DuckDB v1.5.6)
+mkdir C:\Users\%USERNAME%\.duckdb\extensions\v1.5.6\windows_amd64
+move libadbc_driver_snowflake.dll C:\Users\%USERNAME%\.duckdb\extensions\v1.5.6\windows_amd64\libadbc_driver_snowflake.so
 ```
 
 ### Verification
@@ -210,7 +210,7 @@ Test that the driver is found:
 ```sql
 LOAD snowflake;
 SELECT snowflake_version();
--- Should return: "Snowflake Extension v0.5.2"
+-- Should return: "Snowflake Extension v0.6.0"
 ```
 
 ## Configuration
@@ -356,7 +356,7 @@ Returns the extension version information.
 
 ```sql
 SELECT snowflake_version();
--- Returns: "Snowflake Extension v0.5.2"
+-- Returns: "Snowflake Extension v0.6.0"
 ```
 
 ### Table Functions
