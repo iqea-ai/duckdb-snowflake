@@ -6,5 +6,9 @@ duckdb_extension_load(snowflake
     LOAD_TESTS
 )
 
+# DuckDB v2 builds a loaded extension without linking it. Link it into the
+# shell and unittest so tests and the manifest smoke test use the static build.
+duckdb_extension_statically_link(snowflake)
+
 # Any extra extensions that should be built
 # e.g.: duckdb_extension_load(json)

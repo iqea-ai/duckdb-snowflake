@@ -20,11 +20,10 @@ statement ok
 SELECT snowflake_version()
 
 # Test 2: Check Extension Version
-# installed depends on how the test runner loads the extension; v2 loads it by file path
-query T
-SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'snowflake'
+query TT
+SELECT loaded, installed FROM duckdb_extensions() WHERE extension_name = 'snowflake'
 ----
-true
+true	true
 
 # Test 3: Create Basic Snowflake Secret with Keypair Auth
 statement ok
