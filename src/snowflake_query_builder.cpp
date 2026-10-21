@@ -440,8 +440,8 @@ string RenderPushdownQueryForTest(const string &table_name, const string &projec
 			throw InvalidInputException("RenderPushdownQueryForTest: filter_eq_column '%s' not in projection list",
 			                            filter_eq_column);
 		}
-		filter_set.PushFilter(ProjectionIndex(found),
-		                      ExpressionFilter::CreateComparisonFilter(ExpressionType::COMPARE_EQUAL, Value("test_value")));
+		filter_set.PushFilter(ProjectionIndex(found), ExpressionFilter::CreateComparisonFilter(
+		                                                  ExpressionType::COMPARE_EQUAL, Value("test_value")));
 		filter_ptr = &filter_set;
 	}
 

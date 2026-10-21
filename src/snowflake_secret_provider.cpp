@@ -206,7 +206,7 @@ void SnowflakeSecret::Serialize(Serializer &serializer) const {
 unique_ptr<BaseSecret>
 SnowflakeSecret::Deserialize(Deserializer &deserializer,
                              BaseSecret base_secret) { // NOLINT(performance-unnecessary-value-param)
-	return KeyValueSecret::Deserialize<SnowflakeSecret>(deserializer, std::move(base_secret));
+	return KeyValueSecret::Deserialize<SnowflakeSecret>(deserializer, base_secret);
 }
 
 //! Helper to find option with case-insensitive key lookup
