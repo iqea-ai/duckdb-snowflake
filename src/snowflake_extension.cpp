@@ -29,7 +29,7 @@ void RegisterSnowflakeSecretType(DatabaseInstance &instance);
 
 inline void SnowflakeVersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
 	result.SetVectorType(VectorType::CONSTANT_VECTOR);
-	auto val = Value("Snowflake Extension v0.6.0");
+	auto val = Value("Snowflake Extension v0.7.0");
 	result.SetValue(0, val);
 }
 
@@ -38,7 +38,7 @@ inline void SnowflakeVersionScalarFun(DataChunk &args, ExpressionState &state, V
 //! rendered SQL without needing a Snowflake table with lowercase columns.
 inline void SnowflakeRenderPushdownQueryFun(DataChunk &args, ExpressionState &state, Vector &result) {
 	TernaryExecutor::Execute<string_t, string_t, string_t, string_t>(
-	    args.data[0], args.data[1], args.data[2], result, args.size(),
+	    args.data[0], args.data[1], args.data[2], result,
 	    [&](string_t table, string_t projection_csv, string_t filter_eq_column) {
 		    auto rendered = snowflake::RenderPushdownQueryForTest(table.GetString(), projection_csv.GetString(),
 		                                                          filter_eq_column.GetString());
@@ -67,6 +67,12 @@ static FunctionDescription SnowflakeFunctionDescription(vector<string> parameter
 //! ERROR_ON_CONFLICT, so leaving it out would change behavior on re-load.
 template <class INFO, class FUNCTION>
 static void RegisterWithDescription(ExtensionLoader &loader, FUNCTION function, FunctionDescription desc) {
+	// duckdb_functions() reads parameter names from the signature first and
+	// falls back to the description only when the signature has none.
+	auto &signature = function.GetSignature();
+	for (idx_t i = 0; i < desc.parameter_names.size() && i < signature.GetParameterCount(); i++) {
+		signature.GetParameter(i).SetName(Identifier(desc.parameter_names[i]));
+	}
 	INFO info(std::move(function));
 	info.descriptions.push_back(std::move(desc));
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
@@ -164,14 +170,10 @@ DUCKDB_EXTENSION_API const char *snowflake_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
 
-// C++ extension entry point for loadable extensions
-#ifdef DUCKDB_BUILD_LOADABLE_EXTENSION
-extern "C" {
+// C++ extension entry point, used by both the loadable and the static build
 DUCKDB_CPP_EXTENSION_ENTRY(snowflake, loader) {
 	duckdb::LoadInternal(loader);
 }
-}
-#endif
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN

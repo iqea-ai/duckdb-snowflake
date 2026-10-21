@@ -9,7 +9,7 @@ namespace duckdb {
 //! Custom Snowflake secret that extends KeyValueSecret
 class SnowflakeSecret : public KeyValueSecret {
 public:
-	SnowflakeSecret(const vector<string> &prefix_paths, const string &provider, const string &name)
+	SnowflakeSecret(const vector<string> &prefix_paths, const Identifier &provider, const Identifier &name)
 	    : KeyValueSecret(prefix_paths, "snowflake", provider, name) {
 		// Mark sensitive fields for redaction
 		redact_keys.insert("password");
@@ -17,6 +17,10 @@ public:
 		redact_keys.insert("private_key_password");
 		redact_keys.insert("token");
 		redact_keys.insert("secret");
+	}
+
+	//! Used by KeyValueSecret::Deserialize, which restores secret_map and redact_keys
+	explicit SnowflakeSecret(const BaseSecret &secret) : KeyValueSecret(secret) {
 	}
 
 	//! Get Snowflake-specific fields

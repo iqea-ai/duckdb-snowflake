@@ -48,8 +48,14 @@ private:
 	static unique_ptr<ParsedExpression> BuildWhereExpression(TableFilterSet *filter_set,
 	                                                         const vector<string> &column_names);
 
-	//! Transform a single DuckDB TableFilter to ParsedExpression
-	static unique_ptr<ParsedExpression> TransformFilter(const TableFilter &filter, const string &column_name);
+	//! Transform a bound filter expression on one column to a ParsedExpression.
+	//! Returns nullptr if the expression cannot be rendered as Snowflake SQL.
+	static unique_ptr<ParsedExpression> TransformFilterExpression(const Expression &expr, const string &column_name);
+
+	//! True if the filter is an internal filter (optional, dynamic, ...), or an
+	//! AND of only internal filters. Internal filters only prune rows, so they
+	//! can be dropped without a change to the result.
+	static bool IsInternalOnly(const Expression &expr);
 
 	//! Build projection list (SELECT clause expressions)
 	//! Returns empty vector for SELECT *

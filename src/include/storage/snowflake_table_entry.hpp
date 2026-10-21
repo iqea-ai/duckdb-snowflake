@@ -1,7 +1,9 @@
 #pragma once
 
+#include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "snowflake_config.hpp"
 #include "snowflake_client.hpp"
 
@@ -45,10 +47,16 @@ struct SnowflakeTableBindData : public FunctionData {
 class SnowflakeTableEntry : public TableCatalogEntry {
 public:
 	SnowflakeTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info, SnowflakeConfig config)
-	    : TableCatalogEntry(catalog, schema, info), config(std::move(config)) {};
+	    : TableCatalogEntry(catalog, schema, info), columns(std::move(info.columns)), config(std::move(config)) {};
 
 	string GetFullyQualifiedName() const {
-		return catalog.GetName() + "." + schema.name + "." + name;
+		return catalog.GetName().GetIdentifierName() + "." + schema.name.GetIdentifierName() + "." +
+		       name.GetIdentifierName();
+	}
+
+	//! Filled lazily by the first GetScanFunction call
+	const ColumnList &GetColumns() const override {
+		return columns;
 	}
 
 	const SnowflakeConfig &GetConfig() const {
@@ -70,6 +78,7 @@ public:
 	virtual_column_map_t GetVirtualColumns() const override;
 
 private:
+	ColumnList columns;
 	SnowflakeConfig config;
 	//! Serializes access to the schema cache and the lazy columns load below.
 	//! DuckDB shares catalog table entries across connections; concurrent

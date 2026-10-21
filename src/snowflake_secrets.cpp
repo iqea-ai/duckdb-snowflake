@@ -30,7 +30,7 @@ void SnowflakeSecretsHelper::StoreCredentials(ClientContext &context, const std:
 	CreateSecretInput input;
 	input.type = "snowflake";
 	input.provider = "config";
-	input.name = profile_name;
+	input.name = Identifier(profile_name);
 	input.persist_type = SecretPersistType::PERSISTENT;
 
 	// Store all credentials as snowflake-specific fields
@@ -51,7 +51,7 @@ namespace {
 //! Returns empty string if missing or NULL.
 std::string GetSecretString(const KeyValueSecret &secret, const std::string &key) {
 	Value value;
-	if (secret.TryGetValue(key, value) && !value.IsNull()) {
+	if (secret.TryGetValue(Identifier(key), value) && !value.IsNull()) {
 		return value.GetValue<std::string>();
 	}
 	return "";
@@ -59,7 +59,7 @@ std::string GetSecretString(const KeyValueSecret &secret, const std::string &key
 
 int32_t GetSecretInt(const KeyValueSecret &secret, const std::string &key, int32_t default_value) {
 	Value value;
-	if (secret.TryGetValue(key, value) && !value.IsNull()) {
+	if (secret.TryGetValue(Identifier(key), value) && !value.IsNull()) {
 		return value.GetValue<int32_t>();
 	}
 	return default_value;
@@ -145,7 +145,7 @@ bool SnowflakeSecretsHelper::DeleteCredentials(ClientContext &context, const std
 		auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 
 		// Delete the secret by name
-		secret_manager.DropSecretByName(transaction, profile_name, OnEntryNotFound::RETURN_NULL,
+		secret_manager.DropSecretByName(transaction, Identifier(profile_name), OnEntryNotFound::RETURN_NULL,
 		                                SecretPersistType::PERSISTENT);
 		return true;
 
@@ -173,7 +173,7 @@ std::vector<std::string> SnowflakeSecretsHelper::ListProfiles(ClientContext &con
 
 			// Check if this is a Snowflake secret
 			if (secret.GetType() == "snowflake") {
-				profiles.push_back(secret.GetName());
+				profiles.push_back(secret.GetName().GetIdentifierName());
 			}
 		}
 

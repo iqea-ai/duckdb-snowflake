@@ -13,10 +13,9 @@
 namespace duckdb {
 
 // Factory structure to hold ADBC connection and query information
-// This factory pattern allows us to integrate with DuckDB's arrow_scan table
-// function which expects a factory that can produce ArrowArrayStreamWrapper
-// instances
-struct SnowflakeArrowStreamFactory {
+// DuckDB's arrow scan calls ProduceStream once per scan to get the
+// ArrowArrayStreamWrapper that provides the data
+struct SnowflakeArrowStreamFactory : public ArrowScanFactory {
 	// Connection leased exclusively for this scan, so no other scan drives it
 	// concurrently (ADBC connections are not thread-safe). Returned on destruction.
 	snowflake::ConnectionLease lease;
@@ -46,9 +45,8 @@ struct SnowflakeArrowStreamFactory {
 	bool wrap_as_subquery = false;
 
 	// ADBC driver read-ahead knobs, snapshotted from the session at bind time.
-	// These CANNOT be read where the statement is created: SnowflakeProduceArrowScan
-	// is handed to DuckDB's arrow scanner as a plain function pointer (see
-	// SnowflakeScanBindData), so DuckDB fixes its signature and passes no
+	// These CANNOT be read where the statement is created: DuckDB's arrow scanner
+	// calls ProduceStream with only the stream parameters and passes no
 	// ClientContext — there is nothing there to call TryGetCurrentSetting on.
 	// Bind has the context, so the values are captured there and carried here.
 	snowflake::SnowflakeDriverSettings driver_settings;
@@ -64,7 +62,7 @@ struct SnowflakeArrowStreamFactory {
 		std::memset(&cached_stream, 0, sizeof(cached_stream));
 	}
 
-	~SnowflakeArrowStreamFactory() {
+	~SnowflakeArrowStreamFactory() override {
 		// Release ADBC resources that live on the leased connection BEFORE the
 		// lease (declared first, destroyed last) returns that connection to the
 		// pool — the statement/stream are backed by this connection.
@@ -76,6 +74,10 @@ struct SnowflakeArrowStreamFactory {
 			cached_stream.release(&cached_stream);
 		}
 	}
+
+	// ArrowScanFactory interface
+	void GetSchema(ArrowSchema &schema) override;
+	unique_ptr<ArrowArrayStreamWrapper> ProduceStream(ArrowStreamParameters &parameters) override;
 
 	// Update pushdown parameters from DuckDB optimizer
 	// This is called by DuckDB when it wants to push filters and projections to
@@ -92,13 +94,15 @@ struct SnowflakeArrowStreamFactory {
 };
 
 // Function to produce an ArrowArrayStreamWrapper from the factory
-// This is called by DuckDB's arrow_scan when it needs to start scanning data
+// This is called through SnowflakeArrowStreamFactory::ProduceStream when
+// DuckDB's arrow_scan needs to start scanning data
 // Parameters:
-//   factory_ptr: Pointer to our SnowflakeArrowStreamFactory cast to uintptr_t
+//   factory: The factory of the scan
 //   parameters: Arrow stream parameters (projection columns and filters for
 //   pushdown)
 // Returns: An ArrowArrayStreamWrapper that provides Arrow data chunks
-unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr, ArrowStreamParameters &parameters);
+unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(SnowflakeArrowStreamFactory *factory,
+                                                              ArrowStreamParameters &parameters);
 
 // Fetch the Arrow schema by executing the query with a 1-row limit (data-path
 // schema) instead of AdbcStatementExecuteSchema. Required so geoarrow.wkb column

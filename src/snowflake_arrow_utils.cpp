@@ -40,10 +40,8 @@ public:
 // This function is called by DuckDB's arrow_scan to produce an
 // ArrowArrayStreamWrapper It's called once per scan to create the stream that
 // will provide data chunks
-unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_ptr,
+unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(SnowflakeArrowStreamFactory *factory,
                                                               ArrowStreamParameters &parameters) {
-	auto factory = reinterpret_cast<SnowflakeArrowStreamFactory *>(factory_ptr);
-
 	// If the query was pre-executed at bind time (snowflake_query path), return
 	// the cached stream directly without re-executing.
 	if (factory->has_cached_stream) {
@@ -91,7 +89,7 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 		       parameters.projected_columns.columns.size());
 		if (parameters.filters) {
 			DPRINT("  DuckDB passed %llu filters (ignored since pushdown disabled)\n",
-			       parameters.filters->filters.size());
+			       parameters.filters->FilterCount());
 		}
 		// Don't call UpdatePushdownParameters - keep factory->modified_query as the
 		// original query
@@ -181,9 +179,16 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(uintptr_t factory_
 	// Transfer ownership of the ADBC stream to our wrapper
 	// This ensures zero-copy data transfer from Snowflake to DuckDB
 	wrapper->InitializeFromADBC(&adbc_stream);
-	wrapper->number_of_rows = rows_affected;
 
 	return std::move(wrapper);
+}
+
+void SnowflakeArrowStreamFactory::GetSchema(ArrowSchema &schema) {
+	SnowflakeGetArrowSchemaViaQuery(this, schema);
+}
+
+unique_ptr<ArrowArrayStreamWrapper> SnowflakeArrowStreamFactory::ProduceStream(ArrowStreamParameters &parameters) {
+	return SnowflakeProduceArrowScan(this, parameters);
 }
 
 void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema) {
@@ -500,7 +505,7 @@ void SnowflakeArrowStreamFactory::UpdatePushdownParameters(const vector<string> 
                                                            TableFilterSet *filter_set) {
 	DPRINT("UpdatePushdownParameters called: projection_size=%lu, "
 	       "filter_count=%lu\n",
-	       projection.size(), filter_set ? filter_set->filters.size() : 0);
+	       projection.size(), filter_set ? filter_set->FilterCount() : 0);
 
 	// Store the parameters
 	projection_columns = projection;

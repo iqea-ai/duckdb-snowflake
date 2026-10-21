@@ -5,6 +5,8 @@
 #include "snowflake_secrets.hpp"
 
 #include "duckdb.hpp"
+#include "duckdb/main/attached_database.hpp"
+#include "duckdb/parser/parsed_data/attach_info.hpp"
 
 namespace duckdb {
 namespace snowflake {
