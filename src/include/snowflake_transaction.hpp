@@ -1,5 +1,6 @@
 #pragma once
 
+#include "duckdb/common/reference_map.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/transaction/transaction.hpp"
 #include "duckdb/storage/storage_extension.hpp"

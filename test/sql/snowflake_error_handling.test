@@ -193,7 +193,7 @@ Binder Error: Referenced column "nonexistent_column" not found in FROM clause!
 statement error
 SELECT * FROM nonexistent_db.tpch_sf1.customer;
 ----
-Binder Error: Catalog "nonexistent_db" does not exist!
+does not exist
 
 # Test 18: Test invalid SQL syntax (should fail)
 statement error

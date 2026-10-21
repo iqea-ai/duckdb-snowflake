@@ -10,11 +10,14 @@
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/parser/expression/conjunction_expression.hpp"
 #include "duckdb/parser/expression/operator_expression.hpp"
-#include "duckdb/planner/filter/conjunction_filter.hpp"
-#include "duckdb/planner/filter/constant_filter.hpp"
-#include "duckdb/planner/filter/optional_filter.hpp"
-#include "duckdb/planner/filter/in_filter.hpp"
-#include "duckdb/planner/filter/dynamic_filter.hpp"
+#include "duckdb/planner/expression/bound_comparison_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
+#include "duckdb/planner/filter/table_filter_functions.hpp"
+#include "duckdb/planner/table_filter_set.hpp"
 
 namespace duckdb {
 namespace snowflake {
@@ -160,7 +163,7 @@ string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<
 	//    so DuckDB will not wrap it in quotes.
 	static const string from_placeholder = "__SNOWFLAKE_FROM_PLACEHOLDER__";
 	auto table_ref = make_uniq<BaseTableRef>();
-	table_ref->table_name = from_placeholder;
+	table_ref->SetTable(Identifier(from_placeholder));
 	select_node->from_table = std::move(table_ref);
 
 	// 2. Build the SELECT clause (projection list) with placeholder column names
@@ -193,16 +196,16 @@ string SnowflakeQueryBuilder::BuildQuery(const string &table_name, const vector<
 
 unique_ptr<ParsedExpression> SnowflakeQueryBuilder::BuildWhereExpression(TableFilterSet *filter_set,
                                                                          const vector<string> &column_names) {
-	if (!filter_set || filter_set->filters.empty()) {
+	if (!filter_set || !filter_set->HasFilters()) {
 		return nullptr;
 	}
 
 	vector<unique_ptr<ParsedExpression>> conditions;
 
 	// Transform each filter to a ParsedExpression
-	for (const auto &filter_pair : filter_set->filters) {
-		idx_t column_idx = filter_pair.first;
-		const auto &filter = filter_pair.second;
+	for (const auto &entry : *filter_set) {
+		idx_t column_idx = entry.GetIndex().GetIndex();
+		const auto &filter = entry.Filter();
 
 		if (column_idx >= column_names.size()) {
 			throw InternalException("Filter column index %llu out of range (have %llu columns)", column_idx,
@@ -210,13 +213,21 @@ unique_ptr<ParsedExpression> SnowflakeQueryBuilder::BuildWhereExpression(TableFi
 		}
 
 		const string &column_name = column_names[column_idx];
-		auto condition = TransformFilter(*filter, column_name);
-		// Note: TransformFilter returns nullptr for filters that should be skipped
-		// (e.g., uninitialized DYNAMIC_FILTER) These filters will be applied by
-		// DuckDB locally after fetching data
+		auto &expr = ExpressionFilter::GetExpressionFilter(filter, "SnowflakeQueryBuilder::BuildWhereExpression").expr;
+		auto condition = TransformFilterExpression(*expr, column_name);
 		if (condition) {
 			conditions.push_back(std::move(condition));
+			continue;
 		}
+		// DuckDB removes a pushed filter from the plan and does not apply it again.
+		// Only internal filters (optional, dynamic) may be dropped: they only prune rows.
+		if (!IsInternalOnly(*expr)) {
+			throw NotImplementedException("Filter '%s' on column '%s' is not supported for Snowflake pushdown. "
+			                              "To use this query, disable pushdown with: ATTACH '' AS name (TYPE "
+			                              "snowflake, ..., enable_pushdown false)",
+			                              expr->ToString(), column_name);
+		}
+		DPRINT("Skipping internal filter on column '%s'\n", column_name.c_str());
 	}
 
 	// Combine conditions with AND
@@ -235,206 +246,149 @@ unique_ptr<ParsedExpression> SnowflakeQueryBuilder::BuildWhereExpression(TableFi
 	}
 }
 
-unique_ptr<ParsedExpression> SnowflakeQueryBuilder::TransformFilter(const TableFilter &filter,
-                                                                    const string &column_name) {
-	// Create column reference
-	auto column_ref = make_uniq<ColumnRefExpression>(column_name);
+static bool IsInternalFilterFunction(const Expression &expr) {
+	return expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION &&
+	       TableFilterFunctions::IsTableFilterFunction(expr.Cast<BoundFunctionExpression>().Function());
+}
 
-	switch (filter.filter_type) {
-	case TableFilterType::CONSTANT_COMPARISON: {
-		auto &const_filter = filter.Cast<ConstantFilter>();
+bool SnowflakeQueryBuilder::IsInternalOnly(const Expression &expr) {
+	if (IsInternalFilterFunction(expr)) {
+		return true;
+	}
+	if (expr.GetExpressionType() != ExpressionType::CONJUNCTION_AND) {
+		return false;
+	}
+	for (auto &child : expr.Cast<BoundConjunctionExpression>().GetChildren()) {
+		if (!IsInternalOnly(*child)) {
+			return false;
+		}
+	}
+	return true;
+}
 
-		// Map comparison type to expression type
-		ExpressionType comparison_type;
-		switch (const_filter.comparison_type) {
+//! The filter subject is the scanned column itself
+static bool IsColumnSubject(const Expression &expr) {
+	return expr.GetExpressionClass() == ExpressionClass::BOUND_REF ||
+	       expr.GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF;
+}
+
+static unique_ptr<ParsedExpression> MakeColumnRef(const string &column_name) {
+	return make_uniq<ColumnRefExpression>(Identifier(column_name));
+}
+
+static unique_ptr<ParsedExpression> CombineConditions(ExpressionType type,
+                                                      vector<unique_ptr<ParsedExpression>> conditions) {
+	auto result = std::move(conditions[0]);
+	for (size_t i = 1; i < conditions.size(); i++) {
+		result = make_uniq<ConjunctionExpression>(type, std::move(result), std::move(conditions[i]));
+	}
+	return result;
+}
+
+unique_ptr<ParsedExpression> SnowflakeQueryBuilder::TransformFilterExpression(const Expression &expr,
+                                                                              const string &column_name) {
+	if (BoundComparisonExpression::IsComparison(expr)) {
+		auto &comparison = expr.Cast<BoundFunctionExpression>();
+		auto comparison_type = comparison.GetExpressionType();
+		switch (comparison_type) {
 		case ExpressionType::COMPARE_EQUAL:
 		case ExpressionType::COMPARE_NOTEQUAL:
 		case ExpressionType::COMPARE_LESSTHAN:
 		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 		case ExpressionType::COMPARE_GREATERTHAN:
 		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-			comparison_type = const_filter.comparison_type;
 			break;
 		default:
-			throw NotImplementedException("Comparison type not supported for pushdown: %s",
-			                              ExpressionTypeToString(const_filter.comparison_type));
-		}
-
-		// Create constant value expression
-		auto constant = make_uniq<ConstantExpression>(const_filter.constant);
-
-		// Create comparison expression
-		return make_uniq<ComparisonExpression>(comparison_type, std::move(column_ref), std::move(constant));
-	}
-
-	case TableFilterType::IS_NULL: {
-		// column IS NULL
-		return make_uniq<OperatorExpression>(ExpressionType::OPERATOR_IS_NULL, std::move(column_ref));
-	}
-
-	case TableFilterType::IS_NOT_NULL: {
-		// column IS NOT NULL
-		return make_uniq<OperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, std::move(column_ref));
-	}
-
-	case TableFilterType::CONJUNCTION_AND: {
-		// Handle AND of multiple filters (e.g., date >= X AND date < Y)
-		auto &conj_filter = filter.Cast<ConjunctionAndFilter>();
-
-		if (conj_filter.child_filters.empty()) {
-			throw InternalException("CONJUNCTION_AND filter has no child filters for column '%s'", column_name.c_str());
-		}
-
-		// Recursively transform all child filters
-		// Skip only unpushable filters (like uninitialized DYNAMIC_FILTERs)
-		// Push whatever we can, let DuckDB handle the rest
-		vector<unique_ptr<ParsedExpression>> conditions;
-		for (const auto &child : conj_filter.child_filters) {
-			auto condition = TransformFilter(*child, column_name);
-			if (condition) {
-				// This filter can be pushed
-				conditions.push_back(std::move(condition));
-			} else {
-				// This filter can't be pushed (e.g., uninitialized DYNAMIC_FILTER)
-				// Skip it - DuckDB will apply it locally
-				DPRINT("Skipping unpushable child filter in CONJUNCTION_AND on column "
-				       "'%s'\n",
-				       column_name.c_str());
-			}
-		}
-
-		// If no conditions could be pushed, return nullptr
-		if (conditions.empty()) {
-			DPRINT("No pushable conditions in CONJUNCTION_AND for column '%s'\n", column_name.c_str());
 			return nullptr;
 		}
-
-		// If only one condition, return it directly
-		if (conditions.size() == 1) {
-			return std::move(conditions[0]);
+		auto &left = BoundComparisonExpression::Left(comparison);
+		auto &right = BoundComparisonExpression::Right(comparison);
+		optional_ptr<const BoundConstantExpression> constant;
+		if (IsColumnSubject(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			constant = right.Cast<BoundConstantExpression>();
+		} else if (IsColumnSubject(right) && left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			constant = left.Cast<BoundConstantExpression>();
+			comparison_type = FlipComparisonExpression(comparison_type);
+		} else {
+			return nullptr;
 		}
-
-		// Combine all conditions with AND
-		auto result = std::move(conditions[0]);
-		for (size_t i = 1; i < conditions.size(); i++) {
-			result = make_uniq<ConjunctionExpression>(ExpressionType::CONJUNCTION_AND, std::move(result),
-			                                          std::move(conditions[i]));
-		}
-		return result;
+		return make_uniq<ComparisonExpression>(comparison_type, MakeColumnRef(column_name),
+		                                       ConstantExpression::FromValue(constant->GetValue()));
 	}
 
-	case TableFilterType::OPTIONAL_FILTER: {
-		// Unwrap optional filter and process the inner filter
-		auto &opt_filter = filter.Cast<OptionalFilter>();
-		if (!opt_filter.child_filter) {
-			throw InternalException("OPTIONAL_FILTER has no child filter for column '%s'", column_name.c_str());
-		}
-		auto result = TransformFilter(*opt_filter.child_filter, column_name);
-		// Optional filters can return nullptr (e.g., uninitialized DYNAMIC_FILTER)
-		// This is acceptable - DuckDB will apply the filter locally if needed
-		return result;
-	}
-
-	case TableFilterType::IN_FILTER: {
-		// Handle IN clause: column IN (val1, val2, ...)
-		auto &in_filter = filter.Cast<InFilter>();
-
-		if (in_filter.values.empty()) {
-			throw InternalException("IN_FILTER has no values for column '%s'", column_name.c_str());
-		}
-
-		// Build as: (column = val1) OR (column = val2) OR ...
+	switch (expr.GetExpressionClass()) {
+	case ExpressionClass::BOUND_CONJUNCTION: {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		bool is_and = conjunction.GetExpressionType() == ExpressionType::CONJUNCTION_AND;
 		vector<unique_ptr<ParsedExpression>> conditions;
-		for (const auto &value : in_filter.values) {
-			auto col_ref = make_uniq<ColumnRefExpression>(column_name);
-			auto constant = make_uniq<ConstantExpression>(value);
-			auto comparison =
-			    make_uniq<ComparisonExpression>(ExpressionType::COMPARE_EQUAL, std::move(col_ref), std::move(constant));
-			conditions.push_back(std::move(comparison));
-		}
-
-		// Combine with OR
-		auto result = std::move(conditions[0]);
-		for (size_t i = 1; i < conditions.size(); i++) {
-			result = make_uniq<ConjunctionExpression>(ExpressionType::CONJUNCTION_OR, std::move(result),
-			                                          std::move(conditions[i]));
-		}
-		return result;
-	}
-
-	case TableFilterType::CONJUNCTION_OR: {
-		// Handle OR of multiple filters (e.g., col = 1 OR col = 2)
-		auto &conj_filter = filter.Cast<ConjunctionOrFilter>();
-
-		if (conj_filter.child_filters.empty()) {
-			throw InternalException("CONJUNCTION_OR filter has no child filters for column '%s'", column_name.c_str());
-		}
-
-		// Recursively transform all child filters
-		// For OR, we can still push partial filters, but the semantics might change
-		// So we only push if ALL filters in the OR can be pushed
-		vector<unique_ptr<ParsedExpression>> conditions;
-		for (const auto &child : conj_filter.child_filters) {
-			auto condition = TransformFilter(*child, column_name);
-			if (!condition) {
-				// For OR, if any child can't be pushed, we skip the entire OR
-				// This preserves correctness - partial OR pushdown could change
-				// semantics
-				DPRINT("Skipping CONJUNCTION_OR on column '%s' - not all children "
-				       "pushable\n",
-				       column_name.c_str());
+		for (auto &child : conjunction.GetChildren()) {
+			auto condition = TransformFilterExpression(*child, column_name);
+			if (condition) {
+				conditions.push_back(std::move(condition));
+			} else if (!is_and || !IsInternalOnly(*child)) {
+				// Without this child the conjunction would select other rows
 				return nullptr;
 			}
-			conditions.push_back(std::move(condition));
 		}
-
-		// If only one condition, return it directly
-		if (conditions.size() == 1) {
-			return std::move(conditions[0]);
+		if (conditions.empty()) {
+			return nullptr;
 		}
-
-		// Combine all conditions with OR
-		auto result = std::move(conditions[0]);
-		for (size_t i = 1; i < conditions.size(); i++) {
-			result = make_uniq<ConjunctionExpression>(ExpressionType::CONJUNCTION_OR, std::move(result),
-			                                          std::move(conditions[i]));
-		}
-		return result;
+		return CombineConditions(conjunction.GetExpressionType(), std::move(conditions));
 	}
-
-	case TableFilterType::DYNAMIC_FILTER: {
-		// Handle DYNAMIC_FILTER: runtime-generated filters from join optimization
-		// These filters are created by DuckDB during join execution with concrete
-		// values
-		auto &dyn_filter = filter.Cast<DynamicFilter>();
-
-		// Check if the dynamic filter has been initialized with a concrete value
-		if (dyn_filter.filter_data && dyn_filter.filter_data->initialized && dyn_filter.filter_data->filter) {
-			// Extract the underlying ConstantFilter and transform it
-			DPRINT("DYNAMIC_FILTER initialized for column '%s', unwrapping to "
-			       "ConstantFilter\n",
-			       column_name.c_str());
-			return TransformFilter(*dyn_filter.filter_data->filter, column_name);
+	case ExpressionClass::BOUND_OPERATOR: {
+		auto &op = expr.Cast<BoundOperatorExpression>();
+		auto &children = op.GetChildren();
+		if (children.empty() || !IsColumnSubject(*children[0])) {
+			return nullptr;
 		}
-
-		// If not initialized yet, skip this filter - DuckDB will apply it locally
-		// after fetching data This happens when the filter value hasn't been
-		// determined yet during query planning
-		DPRINT("DYNAMIC_FILTER not yet initialized for column '%s', skipping "
-		       "pushdown\n",
-		       column_name.c_str());
+		switch (op.GetExpressionType()) {
+		case ExpressionType::OPERATOR_IS_NULL:
+		case ExpressionType::OPERATOR_IS_NOT_NULL:
+			return make_uniq<OperatorExpression>(op.GetExpressionType(), MakeColumnRef(column_name));
+		case ExpressionType::COMPARE_IN: {
+			// Build as: (column = val1) OR (column = val2) OR ...
+			vector<unique_ptr<ParsedExpression>> conditions;
+			for (idx_t i = 1; i < children.size(); i++) {
+				if (children[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+					return nullptr;
+				}
+				auto &value = children[i]->Cast<BoundConstantExpression>().GetValue();
+				conditions.push_back(make_uniq<ComparisonExpression>(
+				    ExpressionType::COMPARE_EQUAL, MakeColumnRef(column_name), ConstantExpression::FromValue(value)));
+			}
+			if (conditions.empty()) {
+				return nullptr;
+			}
+			return CombineConditions(ExpressionType::CONJUNCTION_OR, std::move(conditions));
+		}
+		default:
+			return nullptr;
+		}
+	}
+	case ExpressionClass::BOUND_FUNCTION: {
+		auto &func = expr.Cast<BoundFunctionExpression>();
+		auto &function_name = func.Function().GetName();
+		if (function_name == OptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<OptionalFilterFunctionData>();
+			return data.child_filter_expr ? TransformFilterExpression(*data.child_filter_expr, column_name) : nullptr;
+		}
+		if (function_name == SelectivityOptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<SelectivityOptionalFilterFunctionData>();
+			return data.child_filter_expr ? TransformFilterExpression(*data.child_filter_expr, column_name) : nullptr;
+		}
+		if (function_name == DynamicFilterScalarFun::NAME && func.BindInfo() && !func.GetChildren().empty()) {
+			// Runtime filter from a join: push its value once the join has set it
+			auto &data = func.BindInfo()->Cast<DynamicFilterFunctionData>();
+			if (!data.filter_data || !data.filter_data->initialized) {
+				return nullptr;
+			}
+			auto comparison = data.filter_data->ToExpression(*func.GetChildren()[0]);
+			return TransformFilterExpression(*comparison, column_name);
+		}
 		return nullptr;
 	}
-
 	default:
-		throw NotImplementedException("Filter type %d on column '%s' is not supported for Snowflake "
-		                              "pushdown. "
-		                              "Supported types: CONSTANT_COMPARISON, IS_NULL, IS_NOT_NULL, "
-		                              "CONJUNCTION_AND, "
-		                              "CONJUNCTION_OR, OPTIONAL_FILTER, IN_FILTER, DYNAMIC_FILTER. "
-		                              "To use this query, disable pushdown with: ATTACH '' AS name (TYPE "
-		                              "snowflake, ..., enable_pushdown false)",
-		                              (int)filter.filter_type, column_name.c_str());
+		return nullptr;
 	}
 }
 
@@ -449,7 +403,7 @@ SnowflakeQueryBuilder::BuildProjectionList(const vector<string> &projection_colu
 
 	// Create ColumnRefExpression for each projected column
 	for (const auto &col : projection_columns) {
-		result.push_back(make_uniq<ColumnRefExpression>(col));
+		result.push_back(MakeColumnRef(col));
 	}
 
 	return result;
@@ -486,7 +440,8 @@ string RenderPushdownQueryForTest(const string &table_name, const string &projec
 			throw InvalidInputException("RenderPushdownQueryForTest: filter_eq_column '%s' not in projection list",
 			                            filter_eq_column);
 		}
-		filter_set.filters[found] = make_uniq<ConstantFilter>(ExpressionType::COMPARE_EQUAL, Value("test_value"));
+		filter_set.PushFilter(ProjectionIndex(found), ExpressionFilter::CreateComparisonFilter(
+		                                                  ExpressionType::COMPARE_EQUAL, Value("test_value")));
 		filter_ptr = &filter_set;
 	}
 

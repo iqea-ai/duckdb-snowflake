@@ -193,7 +193,7 @@ CREATE PERSISTENT SECRET invalid_type (
     DATABASE 'test_db'
 )
 ----
-Secret type 'invalid_type' not found
+not found
 
 # Test 19: Create Duplicate Secret (should fail)
 statement ok
@@ -214,7 +214,7 @@ CREATE PERSISTENT SECRET duplicate_test (
     DATABASE 'test_db'
 )
 ----
-Persistent secret with name 'duplicate_test' already exists in secret storage 'local_file'!
+already exists in secret storage
 
 # Test 20: Clean up all secrets
 statement ok

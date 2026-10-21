@@ -141,7 +141,7 @@ string SnowflakeSecret::GetOktaUrl() const {
 
 //! Helper to try getting value with case-insensitive key lookup
 static bool TryGetValueCaseInsensitive(const SnowflakeSecret &secret, const string &key, Value &value) {
-	return secret.TryGetValue(key, value);
+	return secret.TryGetValue(Identifier(key), value);
 }
 
 //! Validate that all required fields are present
@@ -206,25 +206,7 @@ void SnowflakeSecret::Serialize(Serializer &serializer) const {
 unique_ptr<BaseSecret>
 SnowflakeSecret::Deserialize(Deserializer &deserializer,
                              BaseSecret base_secret) { // NOLINT(performance-unnecessary-value-param)
-	auto result = make_uniq<SnowflakeSecret>(base_secret.GetScope(), base_secret.GetProvider(), base_secret.GetName());
-
-	// Deserialize the secret map
-	Value secret_map_value;
-	deserializer.ReadProperty(201, "secret_map", secret_map_value);
-
-	for (const auto &entry : ListValue::GetChildren(secret_map_value)) {
-		auto kv_struct = StructValue::GetChildren(entry);
-		result->secret_map[kv_struct[0].ToString()] = kv_struct[1];
-	}
-
-	// Deserialize the redact keys
-	Value redact_set_value;
-	deserializer.ReadProperty(202, "redact_keys", redact_set_value);
-	for (const auto &entry : ListValue::GetChildren(redact_set_value)) {
-		result->redact_keys.insert(entry.ToString());
-	}
-
-	return std::move(result);
+	return KeyValueSecret::Deserialize<SnowflakeSecret>(deserializer, base_secret);
 }
 
 //! Helper to find option with case-insensitive key lookup
@@ -263,7 +245,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 			throw InvalidInputException("Snowflake secret requires field '%s'", field);
 		}
 		// Store with lowercase key for consistent retrieval
-		secret->secret_map[field] = it->second;
+		secret->secret_map[Identifier(field)] = it->second;
 	}
 
 	// Process auth-related fields (all optional at this stage, validated later)
@@ -271,7 +253,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 		auto it = FindOptionCaseInsensitive(input.options, field);
 		if (it != input.options.end()) {
 			// Store with lowercase key for consistent retrieval
-			secret->secret_map[field] = it->second;
+			secret->secret_map[Identifier(field)] = it->second;
 		}
 	}
 
@@ -280,7 +262,7 @@ unique_ptr<BaseSecret> CreateSnowflakeSecret(ClientContext &context, CreateSecre
 		auto it = FindOptionCaseInsensitive(input.options, field);
 		if (it != input.options.end()) {
 			// Store with lowercase key for consistent retrieval
-			secret->secret_map[field] = it->second;
+			secret->secret_map[Identifier(field)] = it->second;
 		}
 	}
 

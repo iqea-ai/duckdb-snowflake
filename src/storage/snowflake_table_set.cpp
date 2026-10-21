@@ -10,10 +10,7 @@ void SnowflakeTableSet::LoadEntries(ClientContext &context) {
 	auto table_names = lease->ListTables(context, schema_name);
 
 	for (const auto &table_name : table_names) {
-		CreateTableInfo info;
-		info.table = table_name;
-		info.schema = schema_name;
-		info.catalog = schema.catalog.GetName();
+		CreateTableInfo info(QualifiedName(schema.catalog.GetName(), Identifier(schema_name), Identifier(table_name)));
 		info.on_conflict = OnCreateConflict::IGNORE_ON_CONFLICT;
 		info.temporary = false;
 

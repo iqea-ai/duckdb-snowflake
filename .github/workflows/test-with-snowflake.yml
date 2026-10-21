@@ -20,10 +20,9 @@ jobs:
           fetch-depth: 0
           submodules: true
       
-      - name: Setup DuckDB version
-        run: |
-          cd duckdb
-          git checkout v1.5.6 || git checkout main
+      # The duckdb submodule pin decides the DuckDB version; do not move it here
+      - name: Show DuckDB version
+        run: git -C duckdb log -1 --oneline
       
       - name: Install dependencies
         run: |

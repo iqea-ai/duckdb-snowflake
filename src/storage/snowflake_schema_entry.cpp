@@ -8,7 +8,7 @@ namespace snowflake {
 SnowflakeSchemaEntry::SnowflakeSchemaEntry(Catalog &catalog, const string &schema_name, CreateSchemaInfo &info,
                                            const SnowflakeConfig &config)
     : SchemaCatalogEntry(catalog, info), config(config) {
-	name = schema_name;
+	name = Identifier(schema_name);
 	tables = make_uniq<SnowflakeTableSet>(*this, config, schema_name);
 }
 
@@ -21,7 +21,7 @@ optional_ptr<CatalogEntry> SnowflakeSchemaEntry::LookupEntry(CatalogTransaction 
 	// If the table entry contains dots, user likely supplied too many parts in
 	// the SELECT path. Remind them of the required catalog.schema.table format.
 	if (entry_name.find('.') != string::npos) {
-		const auto &alias = catalog.GetName();
+		const auto &alias = catalog.GetName().GetIdentifierName();
 		throw BinderException("Invalid table reference '%s'. SELECT paths must have exactly three "
 		                      "parts: catalog.schema.table.\n"
 		                      "Use your ATTACH alias for the catalog (e.g., '%s'), followed by "

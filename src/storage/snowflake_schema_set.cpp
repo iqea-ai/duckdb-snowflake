@@ -14,7 +14,7 @@ void SnowflakeSchemaSet::LoadEntries(ClientContext &context) {
 	for (const auto &schema_name : schema_names) {
 		DPRINT("Creating schema entry for: %s\n", schema_name.c_str());
 		auto schema_info = make_uniq<CreateSchemaInfo>();
-		schema_info->schema = schema_name;
+		schema_info->SetSchema(Identifier(schema_name));
 		auto schema_entry = make_uniq<SnowflakeSchemaEntry>(catalog, schema_name, *schema_info, config);
 		entries.insert({schema_name, std::move(schema_entry)});
 	}

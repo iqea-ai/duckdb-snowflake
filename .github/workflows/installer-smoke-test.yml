@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  DUCKDB_CLI_VERSION: v1.5.6
+  DUCKDB_CLI_VERSION: v2.0.0
 
 jobs:
   unix-installer:
@@ -26,17 +26,18 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            cli_asset: duckdb_cli-linux-amd64.zip
+            cli_asset: duckdb-cli-linux-amd64.tar.gz
           - os: macos-latest
-            cli_asset: duckdb_cli-osx-universal.zip
+            cli_asset: duckdb-cli-osx-universal.tar.gz
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install DuckDB CLI (installer detects its version)
         run: |
-          curl -sL -o duckdb_cli.zip "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_CLI_VERSION}/${{ matrix.cli_asset }}"
-          unzip -q duckdb_cli.zip -d "$HOME/duckdb-cli"
+          curl -sfL -o duckdb_cli.tar.gz "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_CLI_VERSION}/${{ matrix.cli_asset }}"
+          mkdir -p "$HOME/duckdb-cli"
+          tar -xzf duckdb_cli.tar.gz -C "$HOME/duckdb-cli"
           echo "$HOME/duckdb-cli" >> "$GITHUB_PATH"
 
       - name: Run installer
@@ -80,8 +81,8 @@ jobs:
         run: |
           $duckdbDir = "$env:USERPROFILE\duckdb-cli"
           New-Item -ItemType Directory -Force -Path $duckdbDir | Out-Null
-          curl.exe -sL -o duckdb_cli.zip "https://github.com/duckdb/duckdb/releases/download/$env:DUCKDB_CLI_VERSION/duckdb_cli-windows-amd64.zip"
-          Expand-Archive duckdb_cli.zip -DestinationPath $duckdbDir -Force
+          curl.exe -sfL -o duckdb_cli.tar.gz "https://github.com/duckdb/duckdb/releases/download/$env:DUCKDB_CLI_VERSION/duckdb-cli-windows-amd64.tar.gz"
+          tar -xzf duckdb_cli.tar.gz -C $duckdbDir
           if (-not (Test-Path "$duckdbDir\duckdb.exe")) {
             Write-Error "duckdb.exe was not found after extraction"
             exit 1

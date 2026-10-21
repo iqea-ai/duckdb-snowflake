@@ -83,7 +83,13 @@ SnowflakeClient::SnowflakeClient() {
 }
 
 SnowflakeClient::~SnowflakeClient() {
-	Disconnect();
+	// Disconnect throws when a release fails; an exception that leaves a
+	// destructor terminates the process, so the failure is logged and dropped.
+	try {
+		Disconnect();
+	} catch (const std::exception &e) {
+		DPRINT("SnowflakeClient: release failed in destructor: %s\n", e.what());
+	}
 }
 
 void SnowflakeClient::Connect(const SnowflakeConfig &config) {

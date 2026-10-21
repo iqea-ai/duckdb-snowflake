@@ -9,15 +9,11 @@ namespace snowflake {
 // scanning infrastructure without reimplementing it
 struct SnowflakeScanBindData : public ArrowScanFunctionData {
 	// The factory holds the ADBC connection and statement, keeping them alive
-	// during the scan
-	unique_ptr<SnowflakeArrowStreamFactory> factory;
+	// during the scan. Same object as ArrowScanFunctionData::factory, typed.
+	shared_ptr<SnowflakeArrowStreamFactory> snowflake_factory;
 
-	explicit SnowflakeScanBindData(unique_ptr<SnowflakeArrowStreamFactory> factory_p)
-	    : ArrowScanFunctionData(SnowflakeProduceArrowScan, reinterpret_cast<uintptr_t>(factory_p.get())),
-	      factory(std::move(factory_p)) {
-		// ArrowScanFunctionData constructor takes:
-		// 1. A function pointer to produce ArrowArrayStreamWrapper instances
-		// 2. A pointer to the factory that will be passed to that function
+	explicit SnowflakeScanBindData(const shared_ptr<SnowflakeArrowStreamFactory> &factory_p)
+	    : ArrowScanFunctionData(factory_p), snowflake_factory(factory_p) {
 	}
 };
 
