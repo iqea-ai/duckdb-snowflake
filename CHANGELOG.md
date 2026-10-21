@@ -9,6 +9,22 @@ The version recorded here is the **extension version** (what `snowflake_version(
 returns and what the [community-extensions descriptor](https://github.com/duckdb/community-extensions/blob/main/extensions/snowflake/description.yml)
 pins). The DuckDB version each release targets is noted separately.
 
+## [0.7.0] - Unreleased
+
+Targets DuckDB **v2.0.0**.
+
+### Changed
+- Port to the DuckDB v2.0 extension API: `Identifier` names in secrets, catalog entries and the scan; the Arrow scan factory interface; an unconditional C++ entry point
+- Filter pushdown reads v2's `ExpressionFilter` (comparisons, `AND`/`OR`, `IS [NOT] NULL`, `IN`, optional and runtime join filters). Pushed SQL now carries typed literals, e.g. `C_CUSTKEY = CAST(42 AS DECIMAL(38, 0))`; results are unchanged
+- `starts_with(col, '...')` on an attached table now reaches Snowflake as a range filter instead of a full scan (DuckDB v2 rewrites it before pushdown)
+- Update DuckDB submodule and CI pins to v2.0, the community-extensions registry's build target
+
+### Fixed
+- `duckdb_functions()` reports real parameter names again on DuckDB v2, which reads them from the function signature before the description ([#67](https://github.com/iqea-ai/duckdb-snowflake/issues/67) regression)
+
+### Notes
+- Users on DuckDB v1.5.6 stay on 0.6.0 (0.5.2 on `osx_arm64`, where the 0.6.0 registry deploy was cancelled).
+
 ## [0.6.0] - 2026-10-09
 
 Targets DuckDB **v1.5.6**.
