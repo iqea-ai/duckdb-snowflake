@@ -25,7 +25,7 @@ Targets DuckDB **v2.0.0**.
 
 ### Notes
 - Users on DuckDB v1.5.6 stay on 0.6.0 (0.5.2 on `osx_arm64`, where the 0.6.0 registry deploy was cancelled).
-- Intel macOS (`osx_amd64`) builds are not published for DuckDB v2.0 yet.
+- The `osx_amd64` extension is in the registry for DuckDB v2.0, but the ADBC Driver Foundry ships no Intel macOS driver. Build the driver from source and set `SNOWFLAKE_ADBC_DRIVER_PATH` (see README).
 
 ## [0.6.0] - 2026-10-09
 
