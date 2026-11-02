@@ -9,7 +9,7 @@ The version recorded here is the **extension version** (what `snowflake_version(
 returns and what the [community-extensions descriptor](https://github.com/duckdb/community-extensions/blob/main/extensions/snowflake/description.yml)
 pins). The DuckDB version each release targets is noted separately.
 
-## [0.7.0] - Unreleased
+## [0.7.0] - 2026-10-21
 
 Targets DuckDB **v2.0.0**.
 
@@ -21,9 +21,11 @@ Targets DuckDB **v2.0.0**.
 
 ### Fixed
 - `duckdb_functions()` reports real parameter names again on DuckDB v2, which reads them from the function signature before the description ([#67](https://github.com/iqea-ai/duckdb-snowflake/issues/67) regression)
+- A failed ADBC connection release in the client destructor no longer terminates the process: the error is logged and dropped ([#76](https://github.com/iqea-ai/duckdb-snowflake/pull/76))
 
 ### Notes
 - Users on DuckDB v1.5.6 stay on 0.6.0 (0.5.2 on `osx_arm64`, where the 0.6.0 registry deploy was cancelled).
+- The `osx_amd64` extension is in the registry for DuckDB v2.0, but the ADBC Driver Foundry ships no Intel macOS driver. Build the driver from source and set `SNOWFLAKE_ADBC_DRIVER_PATH` (see README).
 
 ## [0.6.0] - 2026-10-09
 
