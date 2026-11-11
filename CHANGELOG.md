@@ -9,6 +9,16 @@ The version recorded here is the **extension version** (what `snowflake_version(
 returns and what the [community-extensions descriptor](https://github.com/duckdb/community-extensions/blob/main/extensions/snowflake/description.yml)
 pins). The DuckDB version each release targets is noted separately.
 
+## [Unreleased]
+
+Targets DuckDB **v2.0.0**.
+
+### Changed
+- Snowflake `VARIANT` and `OBJECT` columns now arrive as DuckDB `JSON`, like `ARRAY` columns already did, through `snowflake_query()` and `ATTACH`. They used to arrive as `VARCHAR`, so `typeof()` and `DESCRIBE` now report `JSON`; cast with `::VARCHAR` for the old type. The text is Snowflake's own, so numbers inside a `VARIANT` keep every digit ([#78](https://github.com/iqea-ai/duckdb-snowflake/issues/78))
+
+### Fixed
+- With `enable_pushdown true`, a filter on an `ARRAY` column of an attached table no longer fails with Snowflake error 002040 `Unsupported data type 'JSON'`. Filters on `JSON` columns now run in DuckDB; filters on other columns of the same query are still pushed ([#78](https://github.com/iqea-ai/duckdb-snowflake/issues/78))
+
 ## [0.7.0] - 2026-10-21
 
 Targets DuckDB **v2.0.0**.

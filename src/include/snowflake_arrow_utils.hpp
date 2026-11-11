@@ -113,6 +113,13 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeProduceArrowScan(SnowflakeArrowStre
 // factory's own statement used later during scan production.
 void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema);
 
+// Tag top-level VARIANT and OBJECT string fields with the `arrow.json` extension
+// type, so DuckDB imports them as JSON like the ARRAY columns the driver already
+// tags (issue #78). Replaces `schema` with a nanoarrow-owned copy when it changes
+// anything; leaves it untouched otherwise. Called on every bind schema read from
+// the driver, before the ATTACH schema cache is seeded.
+void SnowflakeTagSemiStructuredAsJson(ArrowSchema &schema);
+
 // Execute the query and cache the resulting Arrow stream in the factory.
 // Also populates schema from the stream's get_schema callback.
 // Used by snowflake_query bind to avoid double-execution: the cached stream is

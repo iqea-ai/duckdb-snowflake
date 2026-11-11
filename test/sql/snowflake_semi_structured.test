@@ -1,0 +1,173 @@
+# name: test/sql/snowflake_semi_structured.test
+# description: Snowflake VARIANT, OBJECT and ARRAY columns arrive as DuckDB JSON on every scan path
+# group: [sql]
+
+#
+# Issue #78. The ADBC driver tags ARRAY columns with the arrow.json extension type
+# but passes VARIANT and OBJECT through as untagged strings, so they used to arrive
+# as VARCHAR. The extension now tags all three as JSON when it reads the bind schema.
+# The text is Snowflake's own, unchanged, so numbers inside a VARIANT keep every digit.
+#
+# With ATTACH pushdown on, filters on these columns stay in DuckDB: Snowflake has no
+# JSON type (a pushed `CAST(... AS "JSON")` fails with 002040) and compares VARIANT
+# values, not their text.
+#
+# Writes to SNOWFLAKE_TEST_WRITE_DATABASE, a writable DB kept separate from
+# SNOWFLAKE_DATABASE (the read-only sample source) so one run can do both.
+
+require snowflake
+
+require json
+
+require-env SNOWFLAKE_ACCOUNT
+
+require-env SNOWFLAKE_USERNAME
+
+require-env SNOWFLAKE_PRIVATE_KEY_FILE
+
+require-env SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE
+
+require-env SNOWFLAKE_TEST_WRITE_DATABASE
+
+statement ok
+CREATE SECRET sf_semi_secret (
+    TYPE snowflake,
+    ACCOUNT '${SNOWFLAKE_ACCOUNT}',
+    USER '${SNOWFLAKE_USERNAME}',
+    AUTH_TYPE 'key_pair',
+    PRIVATE_KEY_FILE '${SNOWFLAKE_PRIVATE_KEY_FILE}',
+    PRIVATE_KEY_PASSWORD '${SNOWFLAKE_PRIVATE_KEY_PASSWORD_FILE}',
+    DATABASE '${SNOWFLAKE_TEST_WRITE_DATABASE}',
+    WAREHOUSE 'COMPUTE_WH'
+);
+
+# --- snowflake_query() SELECT path: the reporter's repro ---
+
+query TTT
+SELECT typeof(V), typeof(O), typeof(A) FROM snowflake_query('SELECT PARSE_JSON(''{"basin":"Montney","k":1}'') AS V, OBJECT_CONSTRUCT(''a'', 1) AS O, ARRAY_CONSTRUCT(''a'',''b'') AS A', 'sf_semi_secret');
+----
+JSON	JSON	JSON
+
+# Values are usable as JSON without a cast
+query TII
+SELECT V->>'basin', (V->>'k')::INT, json_array_length(A) FROM snowflake_query('SELECT PARSE_JSON(''{"basin":"Montney","k":1}'') AS V, ARRAY_CONSTRUCT(''a'',''b'') AS A', 'sf_semi_secret');
+----
+Montney	1	2
+
+# Numbers keep every digit: the column holds Snowflake's text, not a re-encoded value
+query TT
+SELECT VNUM::VARCHAR, typeof(VNUM) FROM snowflake_query('SELECT PARSE_JSON(''12345678901234567890.123'') AS VNUM', 'sf_semi_secret');
+----
+12345678901234567890.123	JSON
+
+# SQL NULL stays NULL; a scalar string VARIANT is a JSON string
+query TT
+SELECT VNULL IS NULL, VSTR->>'$' FROM snowflake_query('SELECT NULL::VARIANT AS VNULL, PARSE_JSON(''"just a string"'') AS VSTR', 'sf_semi_secret');
+----
+true	just a string
+
+# String functions keep working on the JSON column
+query T
+SELECT V LIKE '%Montney%' FROM snowflake_query('SELECT PARSE_JSON(''{"basin":"Montney"}'') AS V', 'sf_semi_secret');
+----
+true
+
+# Other columns are untouched
+query TTT
+SELECT typeof(I), typeof(S), typeof(B) FROM snowflake_query('SELECT 1::INT AS I, ''x'' AS S, TRUE AS B', 'sf_semi_secret');
+----
+DECIMAL(38,0)	VARCHAR	BOOLEAN
+
+# --- fixture for the DDL/DML and ATTACH paths ---
+
+statement ok
+SELECT * FROM snowflake_query('CREATE OR REPLACE SCHEMA ${SNOWFLAKE_TEST_WRITE_DATABASE}.DUCKDB_SEMI_TEST', 'sf_semi_secret');
+
+statement ok
+SELECT * FROM snowflake_query('CREATE OR REPLACE TABLE ${SNOWFLAKE_TEST_WRITE_DATABASE}.DUCKDB_SEMI_TEST.SEMI (ID INT, V VARIANT, O OBJECT, A ARRAY, S VARCHAR)', 'sf_semi_secret');
+
+# DDL/DML path (cached full-width stream) is unaffected
+query I
+SELECT * FROM snowflake_query('INSERT INTO ${SNOWFLAKE_TEST_WRITE_DATABASE}.DUCKDB_SEMI_TEST.SEMI SELECT 1, PARSE_JSON(''{"k":1}''), OBJECT_CONSTRUCT(''a'',1), ARRAY_CONSTRUCT(''a'',''b''), ''x'' UNION ALL SELECT 2, PARSE_JSON(''12345678901234567890.123''), OBJECT_CONSTRUCT(''a'',2), ARRAY_CONSTRUCT(''c''), ''y'' UNION ALL SELECT 3, NULL, NULL, NULL, ''z''', 'sf_semi_secret');
+----
+3
+
+# --- ATTACH path, pushdown on ---
+
+statement ok
+ATTACH '' AS sf_semi (TYPE SNOWFLAKE, SECRET sf_semi_secret, READ_ONLY, enable_pushdown true);
+
+query TT
+SELECT column_name, column_type FROM (DESCRIBE sf_semi.DUCKDB_SEMI_TEST.SEMI) ORDER BY ALL;
+----
+A	JSON
+ID	DECIMAL(38,0)
+O	JSON
+S	VARCHAR
+V	JSON
+
+# A second bind reads the cached schema and gives the same types
+query TTT
+SELECT typeof(V), typeof(O), typeof(A) FROM sf_semi.DUCKDB_SEMI_TEST.SEMI LIMIT 1;
+----
+JSON	JSON	JSON
+
+query IT
+SELECT ID, V::VARCHAR FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE ID = 2;
+----
+2	12345678901234567890.123
+
+# Filters on JSON columns stay in DuckDB. Before the fix, a filter on A pushed
+# CAST(... AS "JSON") to Snowflake and failed (002040), and an IN list on O failed
+# with 001038.
+query I
+SELECT ID FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE A->>0 = 'c';
+----
+2
+
+query I
+SELECT ID FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE V::VARCHAR = '12345678901234567890.123';
+----
+2
+
+query I
+SELECT ID FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE (O->>'a')::INT IN (1, 2) ORDER BY ID;
+----
+1
+2
+
+query I
+SELECT ID FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE V IS NULL;
+----
+3
+
+# A filter on a JSON column next to a pushed filter on a scalar column
+query I
+SELECT ID FROM sf_semi.DUCKDB_SEMI_TEST.SEMI WHERE json(A) = json('["c"]') AND ID = 2;
+----
+2
+
+statement ok
+DETACH sf_semi;
+
+# --- ATTACH path, pushdown off: same rows ---
+
+statement ok
+ATTACH '' AS sf_semi_np (TYPE SNOWFLAKE, SECRET sf_semi_secret, READ_ONLY, enable_pushdown false);
+
+query I
+SELECT ID FROM sf_semi_np.DUCKDB_SEMI_TEST.SEMI WHERE json(A) = json('["c"]') AND ID = 2;
+----
+2
+
+query I
+SELECT ID FROM sf_semi_np.DUCKDB_SEMI_TEST.SEMI WHERE (O->>'a')::INT IN (1, 2) ORDER BY ID;
+----
+1
+2
+
+statement ok
+DETACH sf_semi_np;
+
+statement ok
+SELECT * FROM snowflake_query('DROP SCHEMA IF EXISTS ${SNOWFLAKE_TEST_WRITE_DATABASE}.DUCKDB_SEMI_TEST CASCADE', 'sf_semi_secret');

@@ -3,6 +3,8 @@
 #include "snowflake_query_builder.hpp"
 #include "snowflake_client_manager.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/common/arrow/nanoarrow/nanoarrow.h"
 
 namespace duckdb {
 
@@ -191,6 +193,86 @@ unique_ptr<ArrowArrayStreamWrapper> SnowflakeArrowStreamFactory::ProduceStream(A
 	return SnowflakeProduceArrowScan(this, parameters);
 }
 
+// True for a top-level string field that Snowflake typed VARIANT or OBJECT and the
+// driver left untagged. The driver tags ARRAY columns `arrow.json` but passes
+// VARIANT and OBJECT through with only Snowflake's `logicalType` field metadata, so
+// DuckDB would import them as VARCHAR (issue #78). A field that already carries an
+// Arrow extension name is left alone, so a driver that starts tagging these itself
+// keeps working.
+static bool IsUntaggedSemiStructured(const ArrowSchema &field) {
+	if (!field.format || !field.metadata) {
+		return false;
+	}
+	const std::string format = field.format;
+	if (format != "u" && format != "U" && format != "vu") {
+		return false;
+	}
+	if (duckdb_nanoarrow::ArrowMetadataHasKey(field.metadata, "ARROW:extension:name")) {
+		return false;
+	}
+	duckdb_nanoarrow::ArrowStringView logical_type;
+	duckdb_nanoarrow::ArrowMetadataGetValue(field.metadata, "logicalType", nullptr, &logical_type);
+	if (!logical_type.data) {
+		return false;
+	}
+	auto upper = StringUtil::Upper(std::string(logical_type.data, static_cast<size_t>(logical_type.n_bytes)));
+	return upper == "VARIANT" || upper == "OBJECT";
+}
+
+// Arrow C metadata blob holding the single pair ARROW:extension:name=arrow.json:
+// int32 pair count, then int32 length + bytes for the key and for the value.
+static std::string ArrowJsonExtensionMetadata() {
+	const std::string key = "ARROW:extension:name";
+	const std::string value = "arrow.json";
+	std::string blob;
+	auto append_int32 = [&blob](int32_t n) {
+		blob.append(reinterpret_cast<const char *>(&n), sizeof(n));
+	};
+	append_int32(1);
+	append_int32(static_cast<int32_t>(key.size()));
+	blob += key;
+	append_int32(static_cast<int32_t>(value.size()));
+	blob += value;
+	return blob;
+}
+
+void SnowflakeTagSemiStructuredAsJson(ArrowSchema &schema) {
+	bool needs_tag = false;
+	for (int64_t i = 0; i < schema.n_children; i++) {
+		if (schema.children[i] && IsUntaggedSemiStructured(*schema.children[i])) {
+			needs_tag = true;
+			break;
+		}
+	}
+	if (!needs_tag) {
+		return;
+	}
+	// The driver (Go) owns the metadata buffers of its schema, and nanoarrow's
+	// ArrowSchemaSetMetadata frees the old buffer with ArrowFree. So edit a deep copy
+	// that nanoarrow allocated, then swap it in for the driver's schema.
+	ArrowSchema copy;
+	std::memset(&copy, 0, sizeof(copy));
+	if (duckdb_nanoarrow::ArrowSchemaDeepCopy(&schema, &copy) != 0) {
+		throw IOException("Failed to copy the Snowflake Arrow schema to tag semi-structured columns");
+	}
+	const auto metadata = ArrowJsonExtensionMetadata();
+	for (int64_t i = 0; i < copy.n_children; i++) {
+		auto child = copy.children[i];
+		if (!child || !IsUntaggedSemiStructured(*child)) {
+			continue;
+		}
+		if (duckdb_nanoarrow::ArrowSchemaSetMetadata(child, metadata.data()) != 0) {
+			copy.release(&copy);
+			throw IOException("Failed to tag Snowflake column '%s' as JSON", child->name ? child->name : "");
+		}
+	}
+	if (schema.release) {
+		schema.release(&schema);
+	}
+	// ArrowSchema structs may be moved by value (Arrow C data interface).
+	schema = copy;
+}
+
 void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema) {
 	// Fetch the bind schema by executing the query with a 1-row limit and reading
 	// the schema off the executed stream, instead of AdbcStatementExecuteSchema.
@@ -276,6 +358,7 @@ void SnowflakeGetArrowSchemaViaQuery(SnowflakeArrowStreamFactory *factory, Arrow
 	if (rc != 0) {
 		throw IOException("Failed to get schema from schema-probe stream");
 	}
+	SnowflakeTagSemiStructuredAsJson(schema);
 }
 
 void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowSchema &schema) {
@@ -335,6 +418,7 @@ void SnowflakeExecuteAndCacheStream(SnowflakeArrowStreamFactory *factory, ArrowS
 		if (rc != 0) {
 			throw IOException("Failed to get schema from snowflake_query stream");
 		}
+		SnowflakeTagSemiStructuredAsJson(schema);
 	}
 }
 

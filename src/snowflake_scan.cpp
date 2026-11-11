@@ -211,6 +211,16 @@ TableFunction GetSnowflakeScanFunction() {
 	return snowflake_query;
 }
 
+// Filters on JSON columns stay in DuckDB: Snowflake has no JSON type, so a pushed
+// CAST(... AS "JSON") fails, and it compares VARIANT values rather than their text.
+static bool SnowflakeSupportsPushdownType(const FunctionData &bind_data, idx_t col_idx) {
+	auto &data = bind_data.Cast<ArrowScanFunctionData>();
+	if (col_idx >= data.all_types.size()) {
+		return true;
+	}
+	return !data.all_types[col_idx].IsJSONType();
+}
+
 TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {
 	// Create a table function for ATTACH
 	// This function is used by SnowflakeTableEntry::GetScanFunction()
@@ -229,6 +239,11 @@ TableFunction GetSnowflakeTableScanFunction(bool enable_pushdown) {
 	// Set pushdown flags based on the enable_pushdown parameter
 	table_scan.projection_pushdown = enable_pushdown;
 	table_scan.filter_pushdown = enable_pushdown;
+	// filter_prune lets the planner run a declined filter above the scan: without it
+	// the scan's projection list is empty ("all columns") and the planner would turn
+	// it into the filter column alone. DuckDB's arrow_scan pairs the two the same way.
+	table_scan.filter_prune = enable_pushdown;
+	table_scan.supports_pushdown_type = SnowflakeSupportsPushdownType;
 
 	return table_scan;
 }
